@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getCounter, getPool, isDisplayable } from "@/lib/api";
 import { CounterContent } from "@/components/counter-content";
+import { SwapPanel } from "@/components/swap-panel";
 import { LaunchpadTag } from "@/components/launchpad-tag";
 import { Meter } from "@/components/meter";
 import {
@@ -74,7 +75,11 @@ export default async function CounterPage({ params }: { params: Promise<{ id: st
             </p>
           </div>
 
-          {pool ? <PoolPanel pool={pool} change={change} /> : <NoPoolPanel asset={counter.asset} />}
+          {pool ? (
+            <PoolPanel pool={pool} change={change} asset={counter.asset} divisible={counter.divisible === 1} />
+          ) : (
+            <NoPoolPanel asset={counter.asset} />
+          )}
 
           <Facts
             rows={[
@@ -122,9 +127,13 @@ export default async function CounterPage({ params }: { params: Promise<{ id: st
 function PoolPanel({
   pool,
   change,
+  asset,
+  divisible,
 }: {
   pool: NonNullable<Awaited<ReturnType<typeof getPool>>>;
   change: number | null;
+  asset: string;
+  divisible: boolean;
 }) {
   const depth = pool.asset_b === "XCP" ? pool.reserve_b : pool.reserve_a;
   const tokens = pool.asset_b === "XCP" ? pool.reserve_a : pool.reserve_b;
@@ -185,9 +194,11 @@ function PoolPanel({
         </p>
       </div>
 
+      <SwapPanel asset={asset} divisible={divisible} />
+
       <div className="mt-5 flex gap-2">
         <Link
-          href={`/pool/create?asset=${encodeURIComponent(pool.asset_a)}`}
+          href={`/pool/create?asset=${encodeURIComponent(asset)}`}
           className="flex-1 rounded-xl border border-copper bg-copper-ghost px-4 py-2.5 text-center font-mono text-xs uppercase tracking-[0.1em] text-copper2 transition-colors hover:bg-copper hover:text-bg"
         >
           add liquidity
