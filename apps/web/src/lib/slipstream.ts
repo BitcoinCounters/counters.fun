@@ -71,3 +71,50 @@ export function slipstreamSubmit(hex: string): Promise<SubmitResult> {
 export function slipstreamStatus(txid: string): Promise<Record<string, unknown>> {
   return json(`/api/slipstream?action=status&txid=${encodeURIComponent(txid)}`);
 }
+
+/* ------------------------------------------------------------------ */
+/* Handing a reveal to the box                                        */
+/* ------------------------------------------------------------------ */
+
+export type JobPhase =
+  | "awaiting-commit"
+  | "probing"
+  | "watching"
+  | "confirmed"
+  | "rejected"
+  | "dead";
+
+export interface RevealJob {
+  commitTxid: string;
+  source: string;
+  phase: JobPhase;
+  submitted: boolean;
+  attempts: number;
+  error: string | null;
+  log: string[];
+}
+
+/**
+ * Hand a signed reveal to the server, which finishes it without this tab.
+ *
+ * The whole point of the Slipstream route: the commit must be MINED before MARA
+ * can price the reveal, and that wait is open-ended. Once this resolves the
+ * page can be closed.
+ */
+export function handOffReveal(input: {
+  commitTxid: string;
+  revealHex: string;
+  source: string;
+  asset?: string;
+}): Promise<RevealJob> {
+  return json<RevealJob>("/api/reveal", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
+/** How a handed-off reveal is getting on. */
+export function revealJob(commitTxid: string): Promise<RevealJob> {
+  return json<RevealJob>(`/api/reveal?commit=${encodeURIComponent(commitTxid)}`);
+}

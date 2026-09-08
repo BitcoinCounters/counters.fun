@@ -8,3 +8,7 @@ node_modules/
 dist/
 *.tsbuildinfo
 .dev.vars
+
+# Signed reveals waiting on their commit to be mined — real transactions,
+# never committed. See apps/web/src/lib/server/reveal-jobs.ts.
+.reveal-jobs/
