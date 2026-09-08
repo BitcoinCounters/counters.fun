@@ -42,8 +42,11 @@ export default async function CounterPage({ params }: { params: Promise<{ id: st
 
   return (
     <>
-      <div className="grid items-start gap-8 py-10 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
-        <div className="holo-border overflow-hidden rounded-2xl">
+      {/* minmax(0, …) on every column, including the single one below lg:
+          a grid column's default minimum is its content's min-content width,
+          and a counter's body can be one unbroken 60 KB line. */}
+      <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-8 py-10 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
+        <div className="holo-border min-w-0 overflow-hidden rounded-2xl">
           <div className="counter-stage aspect-square">
             <CounterContent
               number={counter.number}
@@ -57,7 +60,7 @@ export default async function CounterPage({ params }: { params: Promise<{ id: st
           </div>
         </div>
 
-        <div className="flex flex-col gap-6">
+        <div className="flex min-w-0 flex-col gap-6">
           <div>
             <div className="mb-3 flex items-center gap-3">
               <Meter value={counter.number} size={22} />
