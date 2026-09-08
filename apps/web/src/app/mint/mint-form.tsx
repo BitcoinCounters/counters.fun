@@ -5,7 +5,9 @@ import { useWallet } from "@/lib/wallet/wallet-context";
 import { requiresTaproot, xOnly } from "@/lib/wallet/adapter";
 import { guessContentType, classifyMimeType } from "@/lib/inscribe/content";
 import {
+  BelowSlipstreamFloorError,
   NonStandardRevealError,
+  OversizedRevealError,
   RevealPendingError,
   finishReveal,
   lockDescription,
@@ -16,7 +18,10 @@ import {
   type MintPlan,
   type MintResult,
   type MintStage,
+  type RevealRoute,
 } from "@/lib/inscribe/mint";
+import { routeFor } from "@counters/core/slipstream";
+import { revealJob, slipstreamRates, type RevealJob, type SlipstreamRates } from "@/lib/slipstream";
 import { ConnectInline } from "@/components/connect-inline";
 import { FeeRateField, useFeeRate } from "@/components/fee-rate";
 import { effectiveRate, estimateMint, formatFeeRate, vbytesOf } from "@counters/core/fees";
@@ -129,6 +134,8 @@ export function MintForm() {
   const [envelope, setEnvelope] = useState<EnvelopeStyle>("counterparty");
   const fee = useFeeRate();
   const [preset, setPreset] = useState<FairminterPreset>("xcp69");
+  const [routeChoice, setRouteChoice] = useState<RevealRoute>("public");
+  const [rates, setRates] = useState<SlipstreamRates | null | "error">(null);
   const [sale, setSale] = useState<SaleFields>(XCP69_FIELDS);
   const [startLead, setStartLead] = useState(String(XCP69_DEFAULT_START_LEAD));
   const [tip, setTip] = useState<number | null>(null);
@@ -277,6 +284,23 @@ export function MintForm() {
 
   const btcShort = typeof btc === "object" && btc !== null && estimate !== null && btc.confirmed < BigInt(estimate.totalSats);
 
+  // Past the standard relay cap only Slipstream can carry the reveal; below it
+  // the route is the person's choice, defaulting to their own node.
+  const route: RevealRoute = estimate?.nonStandard ? "slipstream" : routeChoice;
+  const belowFloor = route === "slipstream" && typeof rates === "object" && rates !== null && fee.rate !== null && fee.rate < rates.submitFloor;
+
+  useEffect(() => {
+    if (route !== "slipstream") return;
+    let cancelled = false;
+    setRates(null);
+    slipstreamRates()
+      .then((r) => !cancelled && setRates(r))
+      .catch(() => !cancelled && setRates("error"));
+    return () => {
+      cancelled = true;
+    };
+  }, [route]);
+
   const walletError = requiresTaproot(wallet.account);
   const ready =
     wallet.address !== null &&
@@ -288,6 +312,7 @@ export function MintForm() {
     lookup.state !== "checking" &&
     !xcpShort &&
     fee.ok &&
+    !belowFloor &&
     stage === null &&
     !result;
 
@@ -314,6 +339,7 @@ export function MintForm() {
           lockQuantity,
           satPerVbyte: fee.rate ?? 0,
           envelope,
+          route,
           preset: mode === "fairminter" ? preset : undefined,
           fairminter: fairminter ? { ...fairminter.params, lpAsset: fairminter.params.poolQuantity > 0n ? randomNumericAsset() : undefined } : undefined,
         },
@@ -339,7 +365,7 @@ export function MintForm() {
     } catch (err) {
       if (err instanceof RevealPendingError) {
         setError({ message: err.message, detail: describeError(err.cause).message });
-      } else if (err instanceof NonStandardRevealError) {
+      } else if (err instanceof NonStandardRevealError || err instanceof OversizedRevealError || err instanceof BelowSlipstreamFloorError) {
         setError({ message: err.message, detail: null });
       } else if (isCancellation(err)) {
         setError({ message: copy.errors.cancelled(), detail: null });
@@ -349,13 +375,14 @@ export function MintForm() {
     } finally {
       setStage(null);
     }
-  }, [asset, bytes, divisible, envelope, fairminter, fee.rate, lockQuantity, mimeType, mode, preset, supply, wallet.adapter, wallet.address, wallet.publicKey]);
+  }, [asset, bytes, divisible, envelope, fairminter, fee.rate, lockQuantity, mimeType, mode, preset, route, supply, wallet.adapter, wallet.address, wallet.publicKey]);
 
   const resume = useCallback(async () => {
     if (!pending || !wallet.adapter || !wallet.address) return;
     setError(null);
     try {
-      const reveal = await finishReveal(wallet.adapter, wallet.address, pending.revealPsbt, setStage);
+      const pendingRoute: RevealRoute = routeFor(pending.plan.revealWeight) === "slipstream-only" ? "slipstream" : "public";
+      const reveal = await finishReveal(wallet.adapter, wallet.address, pending.revealPsbt, setStage, pendingRoute, pending.asset);
       clearPendingMint();
       setResult({ ...pending.plan, revealTxid: reveal.txid, revealHex: reveal.hex, revealWeight: reveal.weight, commitBroadcast: pending.commitTxid, revealBroadcast: reveal.txid });
       setPending(null);
@@ -379,6 +406,7 @@ export function MintForm() {
         result={result}
         wantLock={lockDesc && result.mode !== "fairminter"}
         satPerVbyte={fee.rate ?? 1}
+        slipstream={route === "slipstream" || routeFor(result.revealWeight) === "slipstream-only"}
       />
     );
   }
@@ -550,6 +578,29 @@ export function MintForm() {
           <Choice label={copy.mint.envelope.ord} hint={copy.mint.envelope.ordHint} active={envelope === "counterparty/ord"} onClick={() => setEnvelope("counterparty/ord")} />
         </div>
         <div className="mt-4 border-t border-line2 pt-3">
+          <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.16em] text-faint">{copy.mint.route.label}</div>
+          <div className="flex flex-col gap-2">
+            <Choice
+              label={copy.mint.route.public}
+              hint={estimate?.nonStandard ? copy.mint.route.publicBlocked : copy.mint.route.publicHint}
+              active={route === "public"}
+              onClick={() => !estimate?.nonStandard && setRouteChoice("public")}
+            />
+            <Choice label={copy.mint.route.slipstream} hint={copy.mint.route.slipstreamHint} active={route === "slipstream"} onClick={() => setRouteChoice("slipstream")} />
+          </div>
+          {route === "slipstream" && (
+            <p className={`mt-2 text-[11px] leading-relaxed ${belowFloor ? "text-bad" : "text-faint"}`}>
+              {rates === "error"
+                ? copy.mint.route.ratesUnknown
+                : rates === null
+                  ? "…"
+                  : belowFloor
+                    ? copy.mint.route.belowFloor(formatFeeRate(rates.submitFloor))
+                    : copy.mint.route.rates(formatFeeRate(rates.submitFloor), formatFeeRate(rates.mineable))}
+            </p>
+          )}
+        </div>
+        <div className="mt-4 border-t border-line2 pt-3">
           <FeeRateField fee={fee} xcpWallet={wallet.adapter?.id === "xcp"} />
         </div>
       </Well>
@@ -649,8 +700,25 @@ export function MintForm() {
 
 /* -------------------------------------------------------------------- */
 
-function Receipt({ result, wantLock, satPerVbyte }: { result: MintResult; wantLock: boolean; satPerVbyte: number }) {
+function Receipt({ result, wantLock, satPerVbyte, slipstream }: { result: MintResult; wantLock: boolean; satPerVbyte: number; slipstream: boolean }) {
   const wallet = useWallet();
+  const [job, setJob] = useState<RevealJob | null>(null);
+
+  // A Slipstream reveal is finished by the server; follow it from here.
+  useEffect(() => {
+    if (!slipstream) return;
+    let cancelled = false;
+    const poll = () =>
+      revealJob(result.commitBroadcast)
+        .then((j) => !cancelled && setJob(j))
+        .catch(() => {});
+    poll();
+    const timer = setInterval(poll, 20_000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [slipstream, result.commitBroadcast]);
   const [lockState, setLockState] = useState<"waiting" | "ready" | "signing" | "done" | "error">("waiting");
   const [lockTxid, setLockTxid] = useState<string | null>(null);
   const [lockError, setLockError] = useState<string | null>(null);
@@ -712,6 +780,15 @@ function Receipt({ result, wantLock, satPerVbyte }: { result: MintResult; wantLo
             {result.revealBroadcast.slice(0, 16)}…
           </a>
         </Row>
+        {slipstream && (
+          <Row label={copy.mint.route.job.label}>
+            <span className={`font-mono text-xs ${job?.phase === "confirmed" ? "text-patina" : job?.phase === "rejected" || job?.phase === "dead" ? "text-bad" : "text-gold"}`}>
+              {job ? (copy.mint.route.job[job.phase] ?? job.phase) : "…"}
+            </span>
+          </Row>
+        )}
+        {slipstream && job?.error && <p className="text-[11px] text-bad">{job.error}</p>}
+        {slipstream && <p className="text-[11px] text-faint">{copy.mint.route.jobNote}</p>}
         <Row label={copy.mint.estimate.commitFee}>
           <span className="font-mono text-xs text-dim">
             {result.commitFee.toLocaleString("en-US")} sat
