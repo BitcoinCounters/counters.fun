@@ -166,3 +166,92 @@ export function tokenSide(pool: Pick<Pool, "asset_a" | "asset_b">): string | nul
   if (pool.asset_a === "XCP") return pool.asset_b;
   return null;
 }
+
+/* -------------------------------------------------------------------- */
+/* Orientation                                                          */
+/* -------------------------------------------------------------------- */
+
+/**
+ * Core sorts every pair (`ledger/markets.py`), and every pool record and
+ * quote comes back in *sorted* order no matter which order the URL named
+ * them in. For a counter whose name sorts after "XCP" — XDUALS, ZELD,
+ * XCPBULL — the token is `asset_b`, not `asset_a`. Nothing here may assume
+ * a side by position; it reads the names.
+ */
+export function sortedPair(a: string, b: string): [string, string] {
+  return a < b ? [a, b] : [b, a];
+}
+
+/** True when `token` is the `asset_a` side of its XCP pair. */
+export function tokenIsA(token: string): boolean {
+  return sortedPair(token, "XCP")[0] === token;
+}
+
+export interface OrientedPool {
+  token: string;
+  tokenReserve: bigint;
+  xcpReserve: bigint;
+  /** XCP per raw unit of the token; use the divisibility to scale for display. */
+  lpAsset: string | null;
+}
+
+/** A pool record read as token/XCP regardless of Core's ordering. Null when the pair is not token/XCP. */
+export function orientPool(
+  pool: Pick<Pool, "asset_a" | "asset_b" | "reserve_a" | "reserve_b"> & { lp_asset?: string },
+  token: string,
+): OrientedPool | null {
+  if (pool.asset_a === token && pool.asset_b === "XCP") {
+    return { token, tokenReserve: big(pool.reserve_a), xcpReserve: big(pool.reserve_b), lpAsset: pool.lp_asset ?? null };
+  }
+  if (pool.asset_b === token && pool.asset_a === "XCP") {
+    return { token, tokenReserve: big(pool.reserve_b), xcpReserve: big(pool.reserve_a), lpAsset: pool.lp_asset ?? null };
+  }
+  return null;
+}
+
+export interface DepositQuoteLike {
+  asset_a?: string;
+  asset_b?: string;
+  first_deposit: boolean;
+  quantity_a_required: Raw;
+  quantity_b_required: Raw;
+  quantity_minted_estimate: Raw;
+}
+
+export interface OrientedDepositQuote {
+  firstDeposit: boolean;
+  tokenRequired: bigint;
+  xcpRequired: bigint;
+  minted: bigint;
+}
+
+/** A deposit quote read as token/XCP. Falls back to the sort rule when the quote omits names. */
+export function orientDepositQuote(quote: DepositQuoteLike, token: string): OrientedDepositQuote {
+  const aIsToken = quote.asset_a !== undefined ? quote.asset_a === token : tokenIsA(token);
+  return {
+    firstDeposit: quote.first_deposit,
+    tokenRequired: big(aIsToken ? quote.quantity_a_required : quote.quantity_b_required),
+    xcpRequired: big(aIsToken ? quote.quantity_b_required : quote.quantity_a_required),
+    minted: big(quote.quantity_minted_estimate),
+  };
+}
+
+export interface WithdrawQuoteLike {
+  asset_a?: string;
+  asset_b?: string;
+  supply: Raw;
+  quantity_a_estimate: Raw;
+  quantity_b_estimate: Raw;
+}
+
+export function orientWithdrawQuote(
+  quote: WithdrawQuoteLike,
+  token: string,
+): { tokenOut: bigint; xcpOut: bigint; supply: bigint } {
+  const aIsToken = quote.asset_a !== undefined ? quote.asset_a === token : tokenIsA(token);
+  return {
+    tokenOut: big(aIsToken ? quote.quantity_a_estimate : quote.quantity_b_estimate),
+    xcpOut: big(aIsToken ? quote.quantity_b_estimate : quote.quantity_a_estimate),
+    supply: big(quote.supply),
+  };
+}

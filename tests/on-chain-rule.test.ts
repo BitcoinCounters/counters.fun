@@ -14,7 +14,7 @@
 import { describe, expect, it } from "vitest";
 import { isOnChain, renderMode, sizeBadge, undisplayableReason, type Counter } from "../packages/counters/src/counter";
 
-const COUNTERS_API = process.env.COUNTERS_API_BASE ?? "https://www.bitcoincounters.com";
+const COUNTERS_API = process.env.COUNTERS_API_BASE ?? "http://127.0.0.1:8081";
 
 async function fullIndex(): Promise<Counter[]> {
   const all: Counter[] = [];
