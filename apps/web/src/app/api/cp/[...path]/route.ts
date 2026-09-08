@@ -34,13 +34,25 @@ const READ_ALLOWED: RegExp[] = [
   /^pools\/[^/]+\/[^/]+\/quote\/deposit$/,
   /^pools\/[^/]+\/[^/]+\/quote\/withdraw$/,
   /^bitcoin\/estimatesmartfee$/, // sat/kB from the node's own bitcoind
+  /^bitcoin\/addresses\/[^/]+\/utxos$/, // BTC pre-flight before a compose
+  /^blocks\/last$/, // the tip, for scheduling a launch
+  /^assets\/[^/]+\/fairminters$/, // was this counter an XCP-69 launch?
+  /^assets\/[^/]+\/balances$/,
 ];
 
 /** POSTs other than composes. */
 const POST_ALLOWED = new Set(["bitcoin/transactions"]); // sendrawtransaction of a signed hex
 
 /** Composes. Each returns an unsigned transaction; none of them move anything. */
-const COMPOSE_ALLOWED = new Set(["issuance", "fairminter", "pooldeposit", "poolwithdraw"]);
+const COMPOSE_ALLOWED = new Set([
+  "issuance",
+  "fairminter",
+  "pooldeposit",
+  "poolwithdraw",
+  // Only used to send LP tokens to the unspendable address; a plain send is
+  // still a compose, and the wallet still sees exactly what it signs.
+  "send",
+]);
 
 function allowed(path: string[], method: string): boolean {
   const joined = path.join("/");
