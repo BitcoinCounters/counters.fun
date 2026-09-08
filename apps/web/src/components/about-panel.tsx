@@ -41,7 +41,7 @@ export function AboutPanel() {
         {copy.about.label}
       </button>
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-2 w-[min(92vw,560px)] rounded-2xl border border-line bg-card p-6 shadow-[0_20px_60px_rgba(0,0,0,0.5)]">
+        <div className="fixed inset-x-3 top-[70px] z-50 max-h-[80vh] overflow-y-auto rounded-2xl border border-line bg-card p-5 shadow-[0_20px_60px_rgba(0,0,0,0.5)] nav:absolute nav:inset-x-auto nav:right-0 nav:top-full nav:mt-2 nav:w-[560px] nav:p-6">
           <p className="mb-3 font-mono text-xs uppercase tracking-[0.22em] text-copper">{copy.home.eyebrow}</p>
           <h2 className="mb-3 font-mono text-[clamp(22px,3vw,30px)] font-semibold leading-[1.12] tracking-[-0.01em] text-ink">
             {copy.home.headline} <span className="text-dim">{copy.home.headlineDim}</span>
