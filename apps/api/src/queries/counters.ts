@@ -54,6 +54,8 @@ export interface CounterRow {
   tx_size: number | null;
   body: string | null;
   block_time: number | null;
+  /** 'xcp.fun' when the deploy came through that launchpad; see @counters/core/launchpad. */
+  launchpad: string | null;
 }
 
 export interface PooledCounterRow extends CounterRow {
@@ -86,7 +88,7 @@ const COUNTER_COLUMNS = `
   c.number, c.asset, c.asset_longname, c.kind, c.content_type, c.size,
   c.is_pointer_like, c.owner, c.txid, c.block, c.tx_index, c.sha256,
   c.rolling_hash, c.supply, c.divisible, c.locked, c.burned, c.fee,
-  c.tx_size, c.body, c.block_time`;
+  c.tx_size, c.body, c.block_time, c.launchpad`;
 
 export type PooledSort = "depth" | "volume" | "change" | "number" | "newest";
 
