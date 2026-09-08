@@ -9,10 +9,11 @@
  */
 
 import type { Counter } from "@counters/core/counter";
+import type { Pool } from "@counters/core/pool";
 import type { Fairminter } from "@counters/core/fairminter";
 import { seedsPool } from "@counters/core/fairminter";
 import { launchpadOfFairminter } from "@counters/core/launchpad";
-import { isXcpPool, poolPrice, tokenSide } from "@counters/core/pool";
+import { isXcpPool, poolPrice, priceFromReserves, tokenSide } from "@counters/core/pool";
 import { big } from "@counters/core/numeric";
 import type { Env } from "#api/env";
 import { one, q } from "#api/db";
@@ -230,6 +231,22 @@ async function syncPools(
   const all = await cp.pools();
   const xcpPools = all.filter(isXcpPool);
 
+  // A token's divisibility decides what its raw reserve means. The counters
+  // table already knows it for every counter; the verbose pool record says
+  // it for everything else.
+  const divisibility = new Map(
+    (await q<{ asset: string; divisible: number | null }>(db, `SELECT asset, divisible FROM counters`)).map((r) => [
+      r.asset,
+      r.divisible === null ? true : r.divisible === 1,
+    ]),
+  );
+  const tokenDivisible = (p: Pool): boolean => {
+    const token = tokenSide(p);
+    if (token && divisibility.has(token)) return divisibility.get(token)!;
+    const info = p.asset_a === token ? p.asset_a_info : p.asset_b_info;
+    return info?.divisible ?? true;
+  };
+
   const now = Math.floor(Date.now() / 1000);
   const writes = xcpPools.map((p) => {
     const token = tokenSide(p);
@@ -258,7 +275,7 @@ async function syncPools(
         p.tx_index ?? null,
         p.block_index,
         p.block_time ?? null,
-        poolPrice(p),
+        poolPrice(p, tokenDivisible(p)),
         now,
       );
   });
@@ -282,7 +299,7 @@ async function syncPools(
   for (const pool of xcpPools) {
     const token = tokenSide(pool);
     if (!token || !counterAssets.has(token)) continue;
-    snapshots += await syncPriceHistory(db, cp, token);
+    snapshots += await syncPriceHistory(db, cp, token, tokenDivisible(pool));
     matches += await syncMatches(db, cp, pool.asset_a, pool.asset_b, token);
   }
 
@@ -290,7 +307,7 @@ async function syncPools(
   return { pools: xcpPools.length, snapshots, matches };
 }
 
-async function syncPriceHistory(db: D1Database, cp: Counterparty, token: string): Promise<number> {
+async function syncPriceHistory(db: D1Database, cp: Counterparty, token: string, divisible: boolean): Promise<number> {
   const latest = await one<{ b: number | null }>(
     db,
     `SELECT MAX(block_index) AS b FROM price_snapshots WHERE token_asset = ?1`,
@@ -303,16 +320,18 @@ async function syncPriceHistory(db: D1Database, cp: Counterparty, token: string)
 
   await db.batch(
     entries.map((e) => {
-      const a = big(e.reserve_a);
-      const b = big(e.reserve_b);
-      const price = a > 0n ? Number((b * 1_000_000_000_000n) / a) / 1e12 : null;
+      // History rows come in the pair's sorted order too; read the sides by name.
+      const tokenIsA = tokenSideIsA(token);
+      const tokenReserve = big(tokenIsA ? e.reserve_a : e.reserve_b);
+      const xcpReserve = big(tokenIsA ? e.reserve_b : e.reserve_a);
+      const price = priceFromReserves(tokenReserve, xcpReserve, divisible);
       return db
         .prepare(
           `INSERT INTO price_snapshots (token_asset, block_index, reserve_a, reserve_b, price, block_time)
            VALUES (?1,?2,?3,?4,?5,?6)
            ON CONFLICT(token_asset, block_index) DO NOTHING`,
         )
-        .bind(token, e.block_index, raw(e.reserve_a), raw(e.reserve_b), e.price ?? price, e.block_time ?? null);
+        .bind(token, e.block_index, raw(e.reserve_a), raw(e.reserve_b), price, e.block_time ?? null);
     }),
   );
   return entries.length;
@@ -511,6 +530,11 @@ function upsertFairminter(db: D1Database, fm: Fairminter, now: number): D1Prepar
       bool(fm.divisible),
       now,
     );
+}
+
+/** Core sorts the pair; the token is `asset_a` only when it sorts before "XCP". */
+function tokenSideIsA(token: string): boolean {
+  return token < "XCP";
 }
 
 /* -------------------------------------------------------------------- */
