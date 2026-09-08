@@ -58,7 +58,6 @@ export function SiteHeader() {
         </nav>
 
         <div className="ml-auto flex items-center gap-2">
-          <SearchBox />
           <PriceTicker />
           <AboutPanel />
           <WalletButton />
@@ -79,6 +78,13 @@ export function SiteHeader() {
               />
             </svg>
           </button>
+        </div>
+      </div>
+
+      {/* Search gets its own row: a wide field reads as a search, not a filter. */}
+      <div className="border-t border-line/60">
+        <div className="mx-auto w-full max-w-[1120px] px-5 py-2">
+          <SearchBox wide />
         </div>
       </div>
 
