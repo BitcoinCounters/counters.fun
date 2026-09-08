@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getCounter, getPool, isDisplayable } from "@/lib/api";
 import { CounterContent } from "@/components/counter-content";
+import { LaunchpadTag } from "@/components/launchpad-tag";
 import { Meter } from "@/components/meter";
 import {
   fmtCompact,
@@ -63,7 +64,10 @@ export default async function CounterPage({ params }: { params: Promise<{ id: st
                 {counter.kind}
               </span>
             </div>
-            <h1 className="font-mono text-3xl font-semibold text-copper2">{counter.asset}</h1>
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="font-mono text-3xl font-semibold text-copper2">{counter.asset}</h1>
+              <LaunchpadTag counter={counter} size="md" />
+            </div>
             <p className="mt-2 text-sm text-dim">
               {fmtSize(counter.size)} of {shortMime(counter.content_type)} in Bitcoin witness data,
               block {counter.block.toLocaleString("en-US")}.

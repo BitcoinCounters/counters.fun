@@ -112,12 +112,18 @@ export class Counterparty {
     return body.result ?? [];
   }
 
-  /** Fairminters in one status. Core has no filter beyond status. */
+  /** Fairminters in one status, all pages. Core has no filter beyond status. */
   async fairminters(status: "open" | "pending" | "closed"): Promise<Fairminter[]> {
-    const body = await this.get<Fairminter[]>(
-      `/v2/fairminters?status=${status}&limit=500&verbose=true`,
-    );
-    return body.result ?? [];
+    const PAGE = 500;
+    const all: Fairminter[] = [];
+    for (let offset = 0; ; offset += PAGE) {
+      const body = await this.get<Fairminter[]>(
+        `/v2/fairminters?status=${status}&limit=${PAGE}&offset=${offset}&verbose=true`,
+      );
+      const page = body.result ?? [];
+      all.push(...page);
+      if (page.length < PAGE) return all;
+    }
   }
 
   /** Holders of an asset — used to prove an LP balance sits at the burn address. */

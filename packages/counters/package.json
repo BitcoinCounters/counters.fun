@@ -7,6 +7,7 @@
     "./counter": "./src/counter.ts",
     "./pool": "./src/pool.ts",
     "./fairminter": "./src/fairminter.ts",
-    "./numeric": "./src/numeric.ts"
+    "./numeric": "./src/numeric.ts",
+    "./launchpad": "./src/launchpad.ts"
   }
 }

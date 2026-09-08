@@ -11,6 +11,7 @@
 import type { Counter } from "@counters/core/counter";
 import type { Fairminter } from "@counters/core/fairminter";
 import { seedsPool } from "@counters/core/fairminter";
+import { launchpadOfFairminter } from "@counters/core/launchpad";
 import { isXcpPool, poolPrice, tokenSide } from "@counters/core/pool";
 import { big } from "@counters/core/numeric";
 import type { Env } from "#api/env";
@@ -405,8 +406,17 @@ async function rollupPools(db: D1Database): Promise<void> {
  * behind, or forever if the description was a pointer).
  */
 async function syncFairminters(db: D1Database, cp: Counterparty): Promise<number> {
-  const [open, pending] = await Promise.all([cp.fairminters("open"), cp.fairminters("pending")]);
+  const [open, pending, closed] = await Promise.all([
+    cp.fairminters("open"),
+    cp.fairminters("pending"),
+    cp.fairminters("closed"),
+  ]);
   const live = [...open, ...pending].filter(seedsPool);
+
+  // Launchpad tagging covers closed launches too: a pooled counter's
+  // fairminter resolved long ago, and the tag is about where it came from,
+  // not whether it is still minting.
+  await tagLaunchpads(db, [...live, ...closed.filter(seedsPool)]);
 
   const now = Math.floor(Date.now() / 1000);
   if (live.length > 0) {
@@ -437,6 +447,28 @@ async function syncFairminters(db: D1Database, cp: Counterparty): Promise<number
     .run();
 
   return live.length;
+}
+
+/**
+ * Stamp `counters.launchpad` from the fairminter that deployed each asset.
+ * Runs every tick and matches by asset, so a counter that is numbered after
+ * its fairminter was first seen is tagged on the next pass. Only positive
+ * results are written; a NULL is never overwritten with a NULL.
+ */
+async function tagLaunchpads(db: D1Database, fairminters: Fairminter[]): Promise<void> {
+  const tagged = new Map<string, string>();
+  for (const fm of fairminters) {
+    const launchpad = launchpadOfFairminter(fm);
+    if (launchpad) tagged.set(fm.asset, launchpad);
+  }
+  if (tagged.size === 0) return;
+  await db.batch(
+    [...tagged].map(([asset, launchpad]) =>
+      db
+        .prepare(`UPDATE counters SET launchpad = ?2 WHERE asset = ?1 AND launchpad IS NOT ?2`)
+        .bind(asset, launchpad),
+    ),
+  );
 }
 
 function upsertFairminter(db: D1Database, fm: Fairminter, now: number): D1PreparedStatement {

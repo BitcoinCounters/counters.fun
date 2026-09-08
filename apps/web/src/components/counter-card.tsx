@@ -3,6 +3,7 @@ import { sizeBadge } from "@counters/core/counter";
 import type { CounterRow, MintingCounter, PooledCounter } from "@/lib/api";
 import { fmtBlocks, fmtCompact, fmtPct, fmtPrice, fmtSize, mimeTag, pctChange } from "@/lib/format";
 import { CounterContent } from "@/components/counter-content";
+import { LaunchpadTag } from "@/components/launchpad-tag";
 import { Meter } from "@/components/meter";
 import { mintProgress } from "@counters/core/fairminter";
 import { big } from "@counters/core/numeric";
@@ -56,7 +57,10 @@ function Shell({
           <Meter value={counter.number} size={13} />
           <span className="font-mono text-[10px] text-faint">{fmtSize(counter.size)}</span>
         </div>
-        <div className="truncate font-mono text-[13px] text-copper2">{counter.asset}</div>
+        <div className="flex items-center justify-between gap-2">
+          <span className="truncate font-mono text-[13px] text-copper2">{counter.asset}</span>
+          <LaunchpadTag counter={counter} />
+        </div>
         {children}
       </div>
     </Link>

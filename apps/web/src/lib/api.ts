@@ -30,6 +30,8 @@ export interface CounterRow {
   tx_size: number | null;
   body: string | null;
   block_time: number | null;
+  /** "xcp.fun" when the deploy came through that launchpad. */
+  launchpad: string | null;
 }
 
 export interface PooledCounter extends CounterRow {
