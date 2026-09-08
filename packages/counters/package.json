@@ -11,6 +11,7 @@
     "./launchpad": "./src/launchpad.ts",
     "./assetnames": "./src/assetnames.ts",
     "./xcp69": "./src/xcp69.ts",
-    "./fees": "./src/fees.ts"
+    "./fees": "./src/fees.ts",
+    "./slipstream": "./src/slipstream.ts"
   }
 }
