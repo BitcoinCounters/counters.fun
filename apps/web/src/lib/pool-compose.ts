@@ -1,70 +1,59 @@
 /**
- * Composing pool deposits and withdrawals.
+ * Composing pool deposits, withdrawals and the LP lock.
  *
- * The math for what a deposit *will* do lives in `@counters/core/pool`; this is
- * the part that talks to the node. Every compose carries a `min_*` bound taken
- * from the slippage setting, so a stale local estimate can only cost a revert,
- * never a bad fill.
+ * The math for what a deposit *will* do lives in `@counters/core/pool`; this
+ * is the part that talks to the node. Every compose carries a `min_*` bound
+ * taken from the slippage setting, so a stale local estimate can only cost a
+ * revert, never a bad fill.
+ *
+ * Two rules the old version got wrong. Core sorts every pair, so nothing
+ * here assumes the token is `asset_a` — quotes and records are oriented by
+ * name (`orientPool`, `orientDepositQuote`). And a lookup that fails is not
+ * a lookup that found nothing: only a 404 means "no pool".
  */
 
-import { big, parseJsonLossless, type Raw } from "@counters/core/numeric";
+import { type Raw } from "@counters/core/numeric";
 import type { Pool } from "@counters/core/pool";
+import { sortedPair, type DepositQuoteLike, type WithdrawQuoteLike } from "@counters/core/pool";
+import { BURN_ADDRESS } from "@/lib/constants";
+import { HARD_MIN_RATE } from "@counters/core/fees";
+import { CpNotFound, cpCompose, cpGet, fetchBalance } from "@/lib/cp";
 import type { ComposeResult } from "@/lib/inscribe/psbt";
 
-async function cp<T>(path: string): Promise<T> {
-  const res = await fetch(`/api/cp/${path}`, { cache: "no-store" });
-  const text = await res.text();
-  const body = parseJsonLossless<{ result: T; error?: string }>(text);
-  if (!res.ok) throw new Error((body as { error?: string })?.error ?? `Counterparty said ${res.status}`);
-  return body.result;
-}
+export { fetchBalance };
 
-/** The pool for a counter, or null when nobody has opened one. */
+/** The pool for a counter, null when nobody has opened one. Throws on any other failure. */
 export async function fetchPool(asset: string): Promise<Pool | null> {
   try {
-    return await cp<Pool | null>(`pools/${encodeURIComponent(asset)}/XCP?verbose=true`);
-  } catch {
-    return null;
+    return await cpGet<Pool>(`pools/${encodeURIComponent(asset)}/XCP?verbose=true`);
+  } catch (cause) {
+    if (cause instanceof CpNotFound) return null;
+    throw cause;
   }
 }
 
-/** Exactly what `/quote/deposit` returns. The names are the node's, not ours. */
-export interface DepositQuote {
-  first_deposit: boolean;
-  /** Raw quantity of the counter asset that will actually be debited. */
-  quantity_a_required: Raw;
-  /** Raw XCP that will actually be debited. */
-  quantity_b_required: Raw;
-  /** LP tokens the deposit will mint. */
-  quantity_minted_estimate: Raw;
-}
+/** Exactly what `/quote/deposit` returns, names included. */
+export type DepositQuote = DepositQuoteLike & { asset_a: string; asset_b: string };
 
 /**
  * What a proportional deposit requires, from the node.
  *
- * This is the authority, and local math is not a substitute for it. The
- * tempting shortcut — treating `sqrt(reserve_a * reserve_b)` as the pool's LP
- * supply — is only true in the instant after a first deposit: swaps grow the
- * reserves while the LP supply stays fixed, so the two drift apart for as long
- * as the pool is traded. On the live MEMENOME pool that shortcut already
- * overstates the mint by 16 basis points, and the error only grows. Since the
- * estimate sets the `min_lp_quantity` floor, an overstatement eventually
- * reverts a transaction the user has already paid a miner fee for.
- *
- * Only meaningful once a pool exists: an empty pool has no ratio, which is
- * exactly what makes a first deposit a price-setting act rather than a matched
- * one.
+ * The node is the authority: the local formula needs the pool's LP supply,
+ * and `sqrt(reserve_a * reserve_b)` is only right in the instant after a
+ * first deposit. `side` says which amount the person typed — the node quotes
+ * from whichever asset the URL names first — so either field can lead.
  */
-export function fetchDepositQuote(asset: string, quantityA: bigint): Promise<DepositQuote> {
-  return cp<DepositQuote>(
-    `pools/${encodeURIComponent(asset)}/XCP/quote/deposit?quantity=${quantityA}&verbose=true`,
+export function fetchDepositQuote(asset: string, side: "token" | "xcp", quantity: bigint): Promise<DepositQuote> {
+  const [first, second] = side === "token" ? [asset, "XCP"] : ["XCP", asset];
+  return cpGet<DepositQuote>(
+    `pools/${encodeURIComponent(first)}/${encodeURIComponent(second)}/quote/deposit?quantity=${quantity}`,
   );
 }
 
-export function fetchWithdrawQuote(asset: string, lpQuantity: bigint) {
-  return cp<{ quantity_a: Raw; quantity_b: Raw }>(
-    `pools/${encodeURIComponent(asset)}/XCP/quote/withdraw?quantity=${lpQuantity}&verbose=true`,
-  );
+export type WithdrawQuote = WithdrawQuoteLike & { asset_a: string; asset_b: string; pool_exists: boolean };
+
+export function fetchWithdrawQuote(asset: string, lpQuantity: bigint): Promise<WithdrawQuote> {
+  return cpGet<WithdrawQuote>(`pools/${encodeURIComponent(asset)}/XCP/quote/withdraw?quantity=${lpQuantity}`);
 }
 
 /**
@@ -73,62 +62,59 @@ export function fetchWithdrawQuote(asset: string, lpQuantity: bigint) {
  * validation rather than at compose.
  */
 export function estimateDepositXcpFee(address: string): Promise<number> {
-  return cp<number>(`addresses/${encodeURIComponent(address)}/compose/pooldeposit/estimatexcpfees`);
+  return cpGet<number>(`addresses/${encodeURIComponent(address)}/compose/pooldeposit/estimatexcpfees`);
 }
 
 export function estimateWithdrawXcpFee(address: string): Promise<number> {
-  return cp<number>(
-    `addresses/${encodeURIComponent(address)}/compose/poolwithdraw/estimatexcpfees`,
-  );
+  return cpGet<number>(`addresses/${encodeURIComponent(address)}/compose/poolwithdraw/estimatexcpfees`);
 }
 
-/**
- * What a compose returns. The prevout arrays are the load-bearing part: they
- * are what lets the transaction be rebuilt as a PSBT without looking anything
- * up, which is what both wallets are handed. Every compose here asks for
- * `verbose=true` to get them.
- */
 export type ComposedTx = ComposeResult;
 
-async function compose(address: string, type: string, params: URLSearchParams): Promise<ComposedTx> {
-  const res = await fetch(`/api/cp/addresses/${encodeURIComponent(address)}/compose/${type}`, {
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: params.toString(),
-  });
-  const body = await res.json().catch(() => null);
-  if (!res.ok) throw new Error(body?.error ?? `Counterparty refused the compose (${res.status})`);
-  return body.result as ComposedTx;
-}
+const COMMON = {
+  exclude_utxos_with_balances: "true",
+  verbose: "true",
+};
 
 export interface DepositRequest {
   address: string;
   asset: string;
-  quantityA: bigint;
-  quantityB: bigint;
+  /** Raw units of the counter. */
+  quantityToken: bigint;
+  /** Raw XCP. */
+  quantityXcp: bigint;
   /** Floor on LP tokens minted. 0 disables the check. */
   minLpQuantity: bigint;
-  /** Only for a first deposit; auto-generated by the node when omitted. */
+  /** Only for a first deposit; the node draws one when omitted. */
   lpAsset?: string;
   satPerVbyte: number;
 }
 
+/**
+ * The pair goes to the node in Core's own order with the quantities kept
+ * beside their assets, so a name that sorts after "XCP" is handled the same
+ * as one that sorts before it.
+ */
+function rate(satPerVbyte: number): string {
+  if (!(satPerVbyte >= HARD_MIN_RATE)) throw new Error("The fee rate must be above zero.");
+  return String(satPerVbyte);
+}
+
 export function composeDeposit(req: DepositRequest): Promise<ComposedTx> {
-  const params = new URLSearchParams({
-    asset_a: req.asset,
-    asset_b: "XCP",
-    // Note the asymmetry consensus imposes: for a first deposit these two
-    // numbers *set the price*, and for every later one they are maximums —
-    // only the proportional amounts are debited.
-    quantity_a: req.quantityA.toString(),
-    quantity_b: req.quantityB.toString(),
+  const [a, b] = sortedPair(req.asset, "XCP");
+  const qa = a === req.asset ? req.quantityToken : req.quantityXcp;
+  const qb = b === req.asset ? req.quantityToken : req.quantityXcp;
+  const params: Record<string, string> = {
+    asset_a: a,
+    asset_b: b,
+    quantity_a: qa.toString(),
+    quantity_b: qb.toString(),
     min_lp_quantity: req.minLpQuantity.toString(),
-    sat_per_vbyte: String(req.satPerVbyte),
-    exclude_utxos_with_balances: "true",
-    verbose: "true",
-  });
-  if (req.lpAsset) params.set("lp_asset", req.lpAsset);
-  return compose(req.address, "pooldeposit", params);
+    sat_per_vbyte: rate(req.satPerVbyte),
+    ...COMMON,
+  };
+  if (req.lpAsset) params.lp_asset = req.lpAsset;
+  return cpCompose(req.address, "pooldeposit", params);
 }
 
 export interface WithdrawRequest {
@@ -136,39 +122,53 @@ export interface WithdrawRequest {
   asset: string;
   /** LP tokens to destroy. */
   quantity: bigint;
-  minQuantityA: bigint;
-  minQuantityB: bigint;
+  minQuantityToken: bigint;
+  minQuantityXcp: bigint;
   satPerVbyte: number;
 }
 
 export function composeWithdraw(req: WithdrawRequest): Promise<ComposedTx> {
-  const params = new URLSearchParams({
-    asset_a: req.asset,
-    asset_b: "XCP",
+  const [a, b] = sortedPair(req.asset, "XCP");
+  const minA = a === req.asset ? req.minQuantityToken : req.minQuantityXcp;
+  const minB = b === req.asset ? req.minQuantityToken : req.minQuantityXcp;
+  return cpCompose(req.address, "poolwithdraw", {
+    asset_a: a,
+    asset_b: b,
     quantity: req.quantity.toString(),
-    min_quantity_a: req.minQuantityA.toString(),
-    min_quantity_b: req.minQuantityB.toString(),
-    sat_per_vbyte: String(req.satPerVbyte),
-    exclude_utxos_with_balances: "true",
-    verbose: "true",
+    min_quantity_a: minA.toString(),
+    min_quantity_b: minB.toString(),
+    sat_per_vbyte: rate(req.satPerVbyte),
+    ...COMMON,
   });
-  return compose(req.address, "poolwithdraw", params);
 }
 
-/** One address's balance of one asset, raw. */
-export async function fetchBalance(address: string, asset: string): Promise<bigint> {
-  try {
-    const rows = await cp<{ quantity: Raw }[]>(
-      `addresses/${encodeURIComponent(address)}/balances/${encodeURIComponent(asset)}?type=address`,
-    );
-    return rows.reduce((sum, r) => sum + big(r.quantity), 0n);
-  } catch {
-    return 0n;
-  }
+/**
+ * Lock liquidity: send LP tokens to the unspendable address. What a pool
+ * fairminter does by consensus at soft cap, done by hand for a pool opened
+ * here. Irreversible, which is the point.
+ */
+export function composeLpLock(address: string, lpAsset: string, quantity: bigint, satPerVbyte: number): Promise<ComposedTx> {
+  return cpCompose(address, "send", {
+    destination: BURN_ADDRESS,
+    asset: lpAsset,
+    quantity: quantity.toString(),
+    sat_per_vbyte: rate(satPerVbyte),
+    ...COMMON,
+  });
 }
 
 /** Reduce a quantity by a slippage percentage, for a `min_*` bound. */
 export function withSlippage(quantity: bigint, percent: number): bigint {
   const bps = BigInt(Math.round(percent * 100));
   return (quantity * (10_000n - bps)) / 10_000n;
+}
+
+/** Raw quantities in the pool's own decimals, for pre-filling a field. */
+export function rawToUnits(raw: Raw | bigint, decimals: number): string {
+  const value = typeof raw === "bigint" ? raw : BigInt(String(raw));
+  if (decimals === 0) return value.toString();
+  const scale = 10n ** BigInt(decimals);
+  const whole = value / scale;
+  const frac = (value % scale).toString().padStart(decimals, "0").replace(/0+$/, "");
+  return frac ? `${whole}.${frac}` : String(whole);
 }
