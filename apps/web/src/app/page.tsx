@@ -1,11 +1,10 @@
-import { Fragment } from "react";
 import Link from "next/link";
 import { getHome, getStats } from "@/lib/api";
 import { MintingCard, PooledCard, UnpooledCard, totalDepth } from "@/components/counter-card";
+import { HomeLede } from "@/components/home-lede";
 import { Meter } from "@/components/meter";
 import { fmtCompact, fmtSize } from "@/lib/format";
 import { copy } from "@content/copy";
-import { fillParagraphs } from "@content/fill";
 
 export const revalidate = 30;
 
@@ -21,7 +20,6 @@ export const revalidate = 30;
  */
 export default async function HomePage() {
   const [home, stats] = await Promise.all([getHome(), getStats()]);
-  const chain = copy.home.chainLine(stats.counters_total - stats.counters_on_chain);
 
   return (
     <>
@@ -32,37 +30,15 @@ export default async function HomePage() {
         <h1 className="mb-2 max-w-[20ch] font-mono text-[clamp(26px,4.4vw,40px)] font-semibold leading-[1.12] tracking-[-0.01em]">
           {copy.home.headline} <span className="text-dim">{copy.home.headlineDim}</span>
         </h1>
-        <div className="mb-9 max-w-[58ch] space-y-4 text-base text-dim">
-          {fillParagraphs(copy.home.lede).map((segments, p) => (
-            <p key={p}>
-              {segments.map((segment, i) => {
-                const inner = segment.bold ? (
-                  <strong className="font-semibold text-ink">{segment.text}</strong>
-                ) : (
-                  segment.text
-                );
-                return segment.href ? (
-                  <a
-                    key={i}
-                    href={segment.href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="underline decoration-copper/50 underline-offset-4 transition-colors hover:decoration-copper"
-                  >
-                    {inner}
-                  </a>
-                ) : (
-                  <Fragment key={i}>{inner}</Fragment>
-                );
-              })}
-            </p>
-          ))}
-        </div>
+        <HomeLede />
 
         <div className="flex flex-wrap items-end gap-9">
           <Stat label={copy.home.stats.pooled} value={stats.pooled} accent />
           <Stat label={copy.home.stats.minting} value={stats.minting} />
-          <Stat label={copy.home.stats.onChain} value={stats.counters_on_chain} />
+          {/* The protocol's own count — every numbered counter, pointers included.
+              The listings below still show only the on-chain ones; that is a
+              display rule, not a different number of counters. */}
+          <Stat label={copy.home.stats.counters} value={stats.counters_total} />
           <div>
             <div className="font-mono text-[26px] font-semibold text-ink">
               {fmtSize(stats.bytes_on_chain)}
@@ -74,11 +50,8 @@ export default async function HomePage() {
         </div>
 
         <p className="mt-6 font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
-          {chain.before} <span className="text-dim">{stats.tip.toLocaleString("en-US")}</span>
-          <span className="mx-2 text-line">·</span>
-          {/* The index holds more counters than it shows. Saying so is more
-              honest than quietly presenting the filtered count as the total. */}
-          <span className="text-dim">{chain.middle}</span> {chain.after}
+          {copy.home.chainLine}{" "}
+          <span className="text-dim">{stats.tip.toLocaleString("en-US")}</span>
         </p>
       </section>
 

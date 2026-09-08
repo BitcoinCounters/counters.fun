@@ -20,9 +20,11 @@ export function SiteHeader() {
     <header className="sticky top-0 z-40 border-b border-line bg-bg/80 backdrop-blur-[10px]">
       <div className="mx-auto flex h-[62px] w-full max-w-[1120px] items-center gap-4 px-5">
         <Link href="/" className="flex flex-shrink-0 items-center gap-2.5">
-          <Mark />
-          <span className="font-mono text-[15px] font-semibold tracking-[0.02em]">counters</span>
-          <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-faint">fun</span>
+          <span className="font-mono text-[15px] font-semibold tracking-[0.02em]">
+            counters<span className="text-faint">.</span>
+            {/* Animated rainbow through the logo's disc colours; see .rainbow-text in globals.css. */}
+            <span className="rainbow-text">FUN</span>
+          </span>
         </Link>
 
         <nav className="ml-1.5 hidden gap-1 nav:flex">
@@ -107,19 +109,3 @@ export function SiteHeader() {
 }
 
 /** A counter's housing, empty — the odometer digit with nothing in it yet. */
-function Mark() {
-  return (
-    <svg width="18" height="20" viewBox="0 0 18 20" fill="none" aria-hidden>
-      <rect
-        x="0.5"
-        y="0.5"
-        width="17"
-        height="19"
-        rx="4"
-        fill="#211c15"
-        stroke="var(--color-line)"
-      />
-      <path d="M5 13.5 L9 5.5 L13 13.5" stroke="var(--color-copper)" strokeWidth="1.6" fill="none" />
-    </svg>
-  );
-}

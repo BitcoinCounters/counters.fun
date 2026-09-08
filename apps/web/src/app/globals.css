@@ -145,6 +145,43 @@ body {
   }
 }
 
+/**
+ * The FUN in the wordmark: a rainbow through the counters logo's disc
+ * colours, clipped to the letters and sliding continuously. The gradient
+ * repeats itself so the slide never shows a seam.
+ */
+.rainbow-text {
+  background-image: linear-gradient(
+    90deg,
+    #f0653f,
+    #ff9f1c,
+    #ffd23f,
+    #3ec78f,
+    #5b8def,
+    #f0653f
+  );
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: rainbow-slide 8s linear infinite;
+}
+
+@keyframes rainbow-slide {
+  from {
+    background-position: 0% 50%;
+  }
+  to {
+    background-position: -300% 50%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rainbow-text {
+    animation: none;
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /* On-chain content                                                    */
 /* ------------------------------------------------------------------ */
