@@ -85,7 +85,11 @@ async function waitFor(url, label, timeoutMs = 90_000) {
  */
 function alignDevVars() {
   const path = join(ROOT, "apps/api/.dev.vars");
-  const origins = `http://localhost:${WEB_PORT} http://127.0.0.1:${WEB_PORT}`;
+  // EXTRA_WEB_ORIGINS adds public origins — a tunnel, say — to the
+  // frame-ancestors list; CSP host wildcards like https://*.ngrok-free.dev
+  // are fine here and survive a tunnel restart handing out a new subdomain.
+  const extra = (process.env.EXTRA_WEB_ORIGINS ?? "").trim();
+  const origins = `http://localhost:${WEB_PORT} http://127.0.0.1:${WEB_PORT}${extra ? ` ${extra}` : ""}`;
   let text = "";
   try {
     text = readFileSync(path, "utf8");
