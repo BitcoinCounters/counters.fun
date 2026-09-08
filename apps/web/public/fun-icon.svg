@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="counters.fun">
+  <defs>
+    <linearGradient id="r" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="192" y2="0">
+      <stop offset="0" stop-color="#f0653f"/>
+      <stop offset="0.1667" stop-color="#ff9f1c"/>
+      <stop offset="0.3333" stop-color="#ffd23f"/>
+      <stop offset="0.5" stop-color="#3ec78f"/>
+      <stop offset="0.6667" stop-color="#5b8def"/>
+      <stop offset="0.8333" stop-color="#f0653f"/>
+      <stop offset="1" stop-color="#ff9f1c"/>
+      <animateTransform attributeName="gradientTransform" type="translate" from="0 0" to="-128 0" dur="8s" repeatCount="indefinite"/>
+    </linearGradient>
+  </defs>
+  <text x="32" y="51" text-anchor="middle" font-family="'IBM Plex Mono','Liberation Mono','DejaVu Sans Mono',monospace" font-weight="700" font-size="52" textLength="64" lengthAdjust="spacingAndGlyphs" fill="url(#r)">FUN</text>
+</svg>

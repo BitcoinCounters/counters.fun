@@ -50,15 +50,11 @@ export const copy = {
     stats: {
       pooled: "pooled",
       minting: "minting",
-      onChain: "on-chain counters",
+      counters: "counters",
       bytes: "committed to bitcoin",
     },
-    /** The line under the stats. `hidden` is the count of pointer counters. */
-    chainLine: (hidden: number) => ({
-      before: "block",
-      middle: `${hidden}`,
-      after: "counters hidden as off-chain pointers",
-    }),
+    /** The line under the stats — the label before the block height. */
+    chainLine: "block",
 
     pooled: {
       title: "Pooled",
