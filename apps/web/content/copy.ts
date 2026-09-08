@@ -260,7 +260,29 @@ export const copy = {
       nativeHint: "Counterparty's own envelope. Smaller by a few bytes.",
     },
     nonStandard:
-      "Past the {{STANDARD_WITNESS_LIMIT_WU}} WU standard relay cap. The public network will not carry this reveal at any fee rate — it needs a direct-to-miner route, which is how the multi-megabyte counters were mined.",
+      "Past the {{STANDARD_WITNESS_LIMIT_WU}} WU standard relay cap. The public network will not carry this reveal at any fee rate, so it goes straight to a miner through Slipstream — which is how the multi-megabyte counters were mined.",
+    route: {
+      label: "reveal route",
+      public: "this node",
+      publicHint: "Relayed by your own bitcoind to the public network. Free, and the usual path.",
+      publicBlocked: "Not available: this reveal is past the standard relay cap.",
+      slipstream: "Slipstream (MARA)",
+      slipstreamHint:
+        "Handed directly to MARA's pool. The only route past 400k WU, and an option for any reveal. MARA cannot price the reveal until the commit is mined, so this tab hands the signed reveal to this server, which finishes it.",
+      rates: (floor: string, mineable: string) => `Slipstream accepts from ${floor} sat/vB and is mining at ${mineable} sat/vB.`,
+      belowFloor: (floor: string) => `Below Slipstream's ${floor} sat/vB acceptance floor. Raise the fee rate.`,
+      ratesUnknown: "Slipstream's current rates could not be read.",
+      job: {
+        label: "slipstream reveal",
+        "awaiting-commit": "waiting for the commit to be mined",
+        probing: "commit mined — finding a submission window",
+        watching: "submitted to MARA — waiting for it to be mined",
+        confirmed: "mined",
+        rejected: "MARA refused it",
+        dead: "given up",
+      } as Record<string, string>,
+      jobNote: "This page can be closed. The server keeps working on it, and the job can be checked by commit txid.",
+    },
     footnote:
       "Two transactions: a commit that funds the envelope, then a reveal that spends it and puts the file in Bitcoin. The commit is broadcast before the reveal is signed — a browser wallet cannot sign an input whose parent it cannot find. If the reveal signature fails, nothing is lost: the envelope names your key, so it can be signed again.",
 
