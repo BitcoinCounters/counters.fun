@@ -133,24 +133,3 @@ export async function fetchAssetFairminters<T = Record<string, unknown>>(asset: 
     throw cause;
   }
 }
-
-/**
- * How many confirmations a transaction has, or null when the node has never
- * seen it.
- *
- * 0 means the node holds it in its mempool. The distinction matters for a
- * Slipstream reveal: MARA prices a reveal from the chain and from its own
- * submissions, never from the public mempool, so a commit sitting at 0 is not
- * yet enough and the reveal would be refused as "Fee rate of 0".
- */
-export async function fetchConfirmations(txid: string): Promise<number | null> {
-  try {
-    const tx = await cpGet<{ confirmations?: number }>(
-      `bitcoin/transactions/${encodeURIComponent(txid)}?verbose=true`,
-    );
-    return tx.confirmations ?? 0;
-  } catch (cause) {
-    if (cause instanceof CpNotFound) return null;
-    throw cause;
-  }
-}

@@ -39,11 +39,11 @@ import {
   unsignedRevealTxid,
 } from "./psbt";
 import { STANDARD_WITNESS_LIMIT_WU } from "@/lib/constants";
-import { cpCompose, fetchConfirmations } from "@/lib/cp";
+import { cpCompose } from "@/lib/cp";
 import { randomNumericAsset } from "@counters/core/assetnames";
 import { HARD_MIN_RATE } from "@counters/core/fees";
 import { MAX_WEIGHT, meetsFloor, routeFor } from "@counters/core/slipstream";
-import { slipstreamRates, slipstreamSubmit } from "@/lib/slipstream";
+import { handOffReveal, slipstreamRates } from "@/lib/slipstream";
 import { fairminterComposeParams, fairminterProblems, type FairminterParams } from "@counters/core/fairminter";
 
 /**
@@ -369,7 +369,7 @@ export async function mintCounter(
 
   onStage?.("signing-reveal");
   try {
-    const reveal = await finishReveal(wallet, req.source, revealPsbt, onStage, req.route);
+    const reveal = await finishReveal(wallet, req.source, revealPsbt, onStage, req.route, asset);
     onStage?.("done");
     return {
       ...plan,
@@ -403,6 +403,8 @@ export async function finishReveal(
   revealPsbt: string,
   onStage?: (stage: MintStage) => void,
   route: RevealRoute = "public",
+  /** Only for the server-side job's record, so a pending mint is identifiable. */
+  asset = "",
 ): Promise<{ txid: string; hex: string; weight: number }> {
   // The reveal is a taproot script-path spend: the wallet signs input 0 against
   // the tapleaf that names its own key. Both wallets handle `tapLeafScript` —
@@ -414,7 +416,7 @@ export async function finishReveal(
     if (final.weight > MAX_WEIGHT) {
       throw new OversizedRevealError(final.weight, final.hex);
     }
-    return sendViaSlipstream(final, onStage);
+    return sendViaSlipstream(final, source, asset, onStage);
   }
 
   // A reveal past the standard relay cap will not propagate no matter how it is
@@ -429,50 +431,35 @@ export async function finishReveal(
   return { txid: txid || final.txid, hex: final.hex, weight: final.weight };
 }
 
-/** How long to wait for the commit before handing the reveal back to be retried. */
-const CONFIRM_TIMEOUT_MS = 6 * 60 * 60_000;
-const CONFIRM_POLL_MS = 30_000;
-
 /**
- * Wait for the commit to be mined, then hand the reveal to MARA.
+ * Hand the reveal to this site's own server, which finishes it from there.
  *
- * The wait is not politeness. Slipstream resolves a transaction's inputs from
- * the chain and from its own submissions, and NEVER from the public mempool —
- * our commit went out over public relay, so MARA cannot see it until it is
- * MINED. A reveal submitted sooner prices as fee 0 and is refused ("Fee rate of
- * 0 is below the threshold"), however patiently it is retried.
+ * The wait is not politeness and it is not short. Slipstream resolves a
+ * transaction's inputs from the chain and from its own submissions, and NEVER
+ * from the public mempool — our commit went out over public relay, so MARA
+ * cannot see it until it is MINED. A reveal submitted sooner prices as fee 0
+ * and is refused ("Fee rate of 0 is below the threshold"), however patiently it
+ * is retried.
  *
- * Polls this site's own node, which is the one that relayed the commit and can
- * see a transaction that never went near MARA. On timeout it throws rather than
- * submitting anyway: the reveal is already stored, so a timeout costs a retry,
- * not the coins.
+ * That wait used to run in this tab. It does not any more: the server takes the
+ * signed bytes, watches for the commit, hunts a submission window and re-uploads
+ * on the ambiguous 524, all without anyone keeping a page open. Handing the hex
+ * over is safe — it spends exactly one output the signer already committed to,
+ * so the server can stall it but can never redirect it.
+ *
+ * The returned txid is the reveal's own, computed from the signed bytes rather
+ * than reported by anyone: nothing has been broadcast yet at this point.
  */
 async function sendViaSlipstream(
   final: { txid: string; hex: string; weight: number },
+  source: string,
+  asset: string,
   onStage?: (stage: MintStage) => void,
 ): Promise<{ txid: string; hex: string; weight: number }> {
   const commitTxid = bytesToHex(RawTx.decode(hexToBytes(final.hex)).inputs[0].txid);
 
   onStage?.("awaiting-commit");
-  const deadline = Date.now() + CONFIRM_TIMEOUT_MS;
-  for (;;) {
-    // A failed poll is not evidence of anything; only a confirmation counts.
-    const confirmations = await fetchConfirmations(commitTxid).catch(() => null);
-    if ((confirmations ?? 0) > 0) break;
-    if (Date.now() >= deadline) {
-      throw new SlipstreamPendingError(final.weight, final.hex, commitTxid);
-    }
-    await new Promise((r) => setTimeout(r, CONFIRM_POLL_MS));
-  }
-
-  onStage?.("broadcasting-reveal");
-  const sent = await slipstreamSubmit(final.hex);
-  if (sent.verdict === "rejected") {
-    throw new SlipstreamRejectedError(sent.message, final.hex);
-  }
-  // `accepted` and `probably-accepted` both mean stop uploading and watch the
-  // chain: a 524 after a full upload is what every accepted large submission
-  // looks like, and re-sending megabytes on it achieves nothing.
+  await handOffReveal({ commitTxid, revealHex: final.hex, source, asset });
   return final;
 }
 
