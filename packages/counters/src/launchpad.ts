@@ -24,20 +24,21 @@
  * A body that merely mentions xcp.fun in prose is neither.
  */
 
-import { big, type Raw } from "./numeric";
+import { type Raw } from "./numeric";
+import { XCP69, matchesXcp69Template } from "./xcp69";
 
 export type Launchpad = "xcp.fun";
 
-/** Raw units. Every value is exact; a launch either matches all of them or is not from the template. */
+/** The numeric template, kept in one place — see ./xcp69. */
 export const XCP_FUN_TEMPLATE = {
-  price: 1_000_000n,
-  quantity_by_price: 100_000_000_000n,
-  hard_cap: 10_000_000_000_000_000n,
-  soft_cap: 6_900_000_000_000_000n,
-  pool_quantity: 3_100_000_000_000_000n,
-  premint_quantity: 0n,
-  max_mint_per_address: 100_000_000_000_000n,
-  divisible: true,
+  price: XCP69.lot_price,
+  quantity_by_price: XCP69.lot_size,
+  hard_cap: XCP69.hard_cap,
+  soft_cap: XCP69.soft_cap,
+  pool_quantity: XCP69.pool_quantity,
+  premint_quantity: XCP69.premint_quantity,
+  max_mint_per_address: XCP69.max_mint_per_address,
+  divisible: XCP69.divisible,
 } as const;
 
 export interface FairminterShape {
@@ -54,17 +55,7 @@ export interface FairminterShape {
 
 /** True when a fairminter's parameters are xcp.fun's template, to the unit. */
 export function matchesXcpFunTemplate(fm: Omit<FairminterShape, "description">): boolean {
-  const t = XCP_FUN_TEMPLATE;
-  return (
-    big(fm.price) === t.price &&
-    big(fm.quantity_by_price) === t.quantity_by_price &&
-    big(fm.hard_cap) === t.hard_cap &&
-    big(fm.soft_cap) === t.soft_cap &&
-    big(fm.pool_quantity ?? 0) === t.pool_quantity &&
-    big(fm.premint_quantity) === t.premint_quantity &&
-    big(fm.max_mint_per_address ?? 0) === t.max_mint_per_address &&
-    Boolean(fm.divisible) === t.divisible
-  );
+  return matchesXcp69Template(fm);
 }
 
 /** The launchpad behind a fairminter: by description first, then by shape. */
