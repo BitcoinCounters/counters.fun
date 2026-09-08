@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { WalletButton } from "@/components/wallet-button";
+import { AboutPanel } from "@/components/about-panel";
 import { copy } from "@content/copy";
 
 const NAV = copy.nav;
@@ -55,6 +56,7 @@ export function SiteHeader() {
         </nav>
 
         <div className="ml-auto flex items-center gap-2">
+          <AboutPanel />
           <WalletButton />
           {/* Below the nav breakpoint the links are hidden, and without this
               there is no navigation on a phone at all beyond the logo. */}
