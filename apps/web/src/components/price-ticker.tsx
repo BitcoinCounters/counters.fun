@@ -5,13 +5,14 @@ import { copy } from "@content/copy";
 
 interface Prices {
   btc: { usd: number; change24h: number | null };
-  xcp: { btc: number; usd: number; sats: number; source: "dispenser" | "dex" } | null;
+  xcp: { btc: number; usd: number; sats: number; change24h: number | null } | null;
+  source: "coingecko" | "mempool";
 }
 
 /**
- * BTC and XCP in the header, from /api/prices — the local mempool backend
- * and the node's own dispensers. Refreshed every minute; absent, not fake,
- * when nothing local can answer.
+ * BTC and XCP in the header, from /api/prices (CoinGecko, server-side,
+ * cached a minute; the local mempool backend for BTC if that fails).
+ * Absent, not fake, when nothing answers.
  */
 export function PriceTicker() {
   const [prices, setPrices] = useState<Prices | null>(null);
@@ -42,8 +43,9 @@ export function PriceTicker() {
           tone="text-copper"
           label="XCP"
           value={`$${usd(prices.xcp.usd, 2)}`}
+          change={prices.xcp.change24h}
           sub={`${prices.xcp.sats.toLocaleString("en-US")} sat`}
-          title={prices.xcp.source === "dispenser" ? copy.prices.xcpDispenser : copy.prices.xcpDex}
+          title={copy.prices.source(prices.source)}
         />
       )}
     </div>
