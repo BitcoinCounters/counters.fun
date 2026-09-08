@@ -39,6 +39,8 @@ export interface ComposeResult {
   lock_scripts: string[];
   psbt?: string;
   data?: string;
+  /** Core's own sizing of the commit; `adjusted_vsize` is what its fee was computed over. */
+  signed_tx_estimated_size?: { vsize: number; adjusted_vsize: number; sigops_count: number };
 }
 
 function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
@@ -100,6 +102,9 @@ export function commitTopUp(compose: ComposeResult, satPerVbyte: number): number
 
   const SIG_FLAG_BYTE = 1;
   const vsize = Math.ceil((coreReveal.weight + SIG_FLAG_BYTE) / 4);
+  // `ceil` on both sides: a fractional rate (0.37 sat/vB is a legitimate
+  // choice on a node that relays down to 0) never rounds the reveal below
+  // the rate it claimed. It may round a satoshi above; that is the cheap side.
   const needed = outputsValue + Math.ceil(vsize * satPerVbyte);
 
   const funded = Number(

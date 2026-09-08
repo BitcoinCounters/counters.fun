@@ -25,12 +25,13 @@
  * out so it can be stashed somewhere durable first.
  */
 
-import { RawTx } from "@scure/btc-signer";
+import { RawTx, Transaction } from "@scure/btc-signer";
 import { commitEnvelope, bytesToHex, hexToBytes, reKeyEnvelope } from "./envelope";
 import { encodeContent } from "./content";
 import {
   type ComposeResult,
   buildCommitPsbt,
+  buildPlainPsbt,
   buildRevealPsbt,
   detectOrdEnvelope,
   commitTopUp,
@@ -38,6 +39,10 @@ import {
   unsignedRevealTxid,
 } from "./psbt";
 import { STANDARD_WITNESS_LIMIT_WU } from "@/lib/constants";
+import { cpCompose } from "@/lib/cp";
+import { randomNumericAsset } from "@counters/core/assetnames";
+import { HARD_MIN_RATE } from "@counters/core/fees";
+import { fairminterComposeParams, fairminterProblems, type FairminterParams } from "@counters/core/fairminter";
 
 /**
  * The wallet this needs, as the adapter defines it — see lib/wallet/adapter.ts.
@@ -65,26 +70,52 @@ export type SigningWallet = WalletAdapter;
  */
 export type EnvelopeStyle = "counterparty" | "counterparty/ord";
 
+/**
+ * Three things a mint can be. They share the whole commit/reveal path and
+ * differ only in what is composed:
+ *
+ * - `counter`: a new asset whose description is the file (compose/issuance).
+ * - `reinscribe`: an existing asset of yours gets a new file; quantity 0, so
+ *   supply is untouched (compose/issuance again — Core treats an issuance of
+ *   an existing asset as a reissuance).
+ * - `fairminter`: a fairminter deploy whose description is the file
+ *   (compose/fairminter). The deploy is itself the counter. XCP-69 is this
+ *   with every parameter fixed to xcp.fun's template; `custom` is the same
+ *   transaction with the parameters the person chose.
+ */
+export type MintMode = "counter" | "reinscribe" | "fairminter";
+export type FairminterPreset = "xcp69" | "custom";
+
 export interface MintRequest {
+  mode: MintMode;
   /** The address issuing the asset. Must be taproot to hold the commit. */
   source: string;
   /** The signer's x-only taproot output key — what the leaf gets re-keyed to. */
   sourceXOnly: Uint8Array;
-  /** A named asset (0.5 XCP burn), a subasset, or "" for a free numeric one. */
+  /**
+   * A named asset (0.5 XCP burn), a subasset, a numeric name, or "" to have
+   * a free numeric one drawn here. Core never picks a name itself — an empty
+   * name is refused as "too short" — so the draw has to happen client-side.
+   */
   asset: string;
   /** The file's bytes. These become the asset's description, verbatim. */
   body: Uint8Array;
   /** MIME committed to by the envelope — it cannot be corrected later. */
   mimeType: string;
-  /** Raw units. 0 issues the asset with no supply, which is still a counter. */
+  /** Raw units. 0 issues the asset with no supply, which is still a counter. Ignored for xcp69. */
   quantity: bigint;
   divisible: boolean;
   lockQuantity: boolean;
   satPerVbyte: number;
   envelope: EnvelopeStyle;
+  /** fairminter only: which shape, for the receipt and the xcp.fun link. */
+  preset?: FairminterPreset;
+  /** fairminter only: the sale, in raw units. Built by the form from the preset or its fields. */
+  fairminter?: FairminterParams;
 }
 
 export type MintStage =
+  | "checking"
   | "composing"
   | "signing-commit"
   | "broadcasting-commit"
@@ -93,6 +124,12 @@ export type MintStage =
   | "done";
 
 export interface MintPlan {
+  mode: MintMode;
+  /** The name actually composed — the drawn one when the request left it empty. */
+  asset: string;
+  /** fairminter: what was deployed. */
+  preset?: FairminterPreset;
+  fairminter?: FairminterParams;
   commitAddress: string;
   commitValue: number;
   commitFee: number;
@@ -104,6 +141,10 @@ export interface MintPlan {
   revealHex: string;
   leafBytes: number;
   revealWeight: number;
+  /** Core's adjusted vsize for the commit — what `commitFee` was computed over. */
+  commitVsize: number;
+  /** Value of the reveal's outputs (0 native, 546 ord); the rest of the commit is fee. */
+  revealOutputs: number;
 }
 
 export interface MintResult extends MintPlan {
@@ -116,7 +157,7 @@ export interface MintResult extends MintPlan {
 /* -------------------------------------------------------------------- */
 
 /**
- * Compose the inscribed issuance.
+ * Compose the inscribed transaction for the mode.
  *
  * `encoding=taproot` is what makes the description land in witness data, and
  * it is the only encoding that can produce a counter: classic OP_RETURN
@@ -124,14 +165,13 @@ export interface MintResult extends MintPlan {
  * it can never show the literal `CNTRPRTY` marker the counters protocol
  * requires.
  */
-async function composeInscribedIssuance(req: MintRequest): Promise<ComposeResult> {
+async function composeMint(req: MintRequest): Promise<{ compose: ComposeResult; asset: string; lpAsset?: string }> {
+  // Core accepts 0 and composes a fee-less commit. Refused here, last of all.
+  if (!(req.satPerVbyte >= HARD_MIN_RATE)) throw new Error("The fee rate must be above zero.");
   const { description } = encodeContent(req.body, req.mimeType);
+  const asset = req.asset || randomNumericAsset();
 
-  const params = new URLSearchParams({
-    asset: req.asset,
-    quantity: req.quantity.toString(),
-    divisible: String(req.divisible),
-    lock: String(req.lockQuantity),
+  const common: Record<string, string> = {
     description,
     mime_type: req.mimeType,
     encoding: "taproot",
@@ -141,24 +181,52 @@ async function composeInscribedIssuance(req: MintRequest): Promise<ComposeResult
     // A UTXO carrying an asset balance is not a coin to spend on fees; moving
     // it would move the balance with it.
     exclude_utxos_with_balances: "true",
-  });
+  };
 
-  // POST, not GET: the description *is* the file, and a 200 KB PNG does not fit
-  // in a query string.
-  const res = await fetch(
-    `/api/cp/addresses/${encodeURIComponent(req.source)}/compose/issuance`,
-    {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: params.toString(),
-    },
-  );
-
-  const body = await res.json().catch(() => null);
-  if (!res.ok) {
-    throw new Error(body?.error ?? `Counterparty refused the compose (${res.status})`);
+  if (req.mode === "fairminter") {
+    if (!req.fairminter) throw new Error("A fairminter deploy needs its parameters.");
+    const problems = fairminterProblems(req.fairminter);
+    if (problems.length > 0) throw new Error(problems.join("; "));
+    // The LP name is drawn here when a pool is wanted and none was given, so
+    // the receipt can show what the pool's token will be.
+    const lpAsset = req.fairminter.poolQuantity > 0n ? req.fairminter.lpAsset || randomNumericAsset() : undefined;
+    const compose = await cpCompose(req.source, "fairminter", {
+      ...fairminterComposeParams({ ...req.fairminter, lpAsset }, asset),
+      ...common,
+    });
+    return { compose, asset, lpAsset };
   }
-  return body.result as ComposeResult;
+
+  const compose = await cpCompose(req.source, "issuance", {
+    asset,
+    // A reinscription changes only the description: quantity 0 leaves the
+    // supply exactly where it is.
+    quantity: req.mode === "reinscribe" ? "0" : req.quantity.toString(),
+    divisible: String(req.divisible),
+    lock: String(req.lockQuantity),
+    ...common,
+  });
+  return { compose, asset };
+}
+
+/**
+ * The reveal's weight, known before anything is signed.
+ *
+ * Core's `signed_reveal_rawtransaction` is a complete reveal with its own
+ * (discarded) key's signature, and the re-keyed reveal has the same shape —
+ * only the 32-byte key inside the leaf changes, never the length. The one
+ * byte of difference is the sighash flag: Core signs SIGHASH_DEFAULT (64-byte
+ * signature), the wallet signs SIGHASH_ALL (65). So this is exact, not an
+ * estimate, and it is what lets a >400k WU reveal be refused before the
+ * commit has cost anyone anything.
+ */
+export function revealWeightOf(compose: ComposeResult): number {
+  const tx = Transaction.fromRaw(hexToBytes(compose.signed_reveal_rawtransaction!), {
+    allowUnknownInputs: true,
+    allowUnknownOutputs: true,
+    disableScriptCheck: true,
+  });
+  return tx.weight + 1;
 }
 
 /* -------------------------------------------------------------------- */
@@ -172,12 +240,20 @@ export async function mintCounter(
   onRevealPsbt?: (psbt: string, plan: MintPlan) => void | Promise<void>,
 ): Promise<MintResult> {
   onStage?.("composing");
-  const compose = await composeInscribedIssuance(req);
+  const { compose, asset, lpAsset } = await composeMint(req);
+  const fairminter = req.fairminter ? { ...req.fairminter, lpAsset } : undefined;
 
   if (!compose.envelope_script || !compose.signed_reveal_rawtransaction) {
     throw new Error(
       "Core returned no commit/reveal pair. The node must be v11+ with taproot envelopes enabled.",
     );
+  }
+
+  // Refused here, before the commit exists, rather than after it is on chain:
+  // a reveal past the standard relay cap will not propagate at any fee rate.
+  const revealWeight = revealWeightOf(compose);
+  if (revealWeight > STANDARD_WITNESS_LIMIT_WU) {
+    throw new NonStandardRevealError(revealWeight, "");
   }
 
   // Core applies `inscription` only to content-carrying issuances and otherwise
@@ -225,6 +301,10 @@ export async function mintCounter(
   const revealOut = revealOutputTotal(compose);
 
   const plan: MintPlan = {
+    mode: req.mode,
+    asset,
+    preset: req.preset,
+    fairminter,
     commitAddress: commit.address,
     commitValue,
     commitFee: compose.btc_fee,
@@ -235,7 +315,9 @@ export async function mintCounter(
     commitHex: commitFinal.hex,
     revealHex: "",
     leafBytes: leaf.length,
-    revealWeight: 0,
+    revealWeight,
+    commitVsize: compose.signed_tx_estimated_size?.adjusted_vsize ?? 0,
+    revealOutputs: revealOut,
   };
 
   // Hand the reveal PSBT out before any money moves. If the caller writes it
@@ -306,6 +388,37 @@ function revealOutputTotal(compose: ComposeResult): number {
     (sum, o) => sum + Number(o.amount),
     0,
   );
+}
+
+/**
+ * Lock an asset's description for good.
+ *
+ * Not a flag on the mint: Core has no `lock_description` on an issuance. It
+ * is a follow-up issuance of quantity 0 whose description is the literal
+ * `lock_description`, and it can only be composed once the asset exists —
+ * i.e. after the reveal has confirmed. A plain OP_RETURN transaction, signed
+ * as an ordinary PSBT by either wallet.
+ */
+export async function lockDescription(
+  wallet: SigningWallet,
+  source: string,
+  asset: string,
+  satPerVbyte: number,
+): Promise<string> {
+  if (!(satPerVbyte >= HARD_MIN_RATE)) throw new Error("The fee rate must be above zero.");
+  const compose = await cpCompose(source, "issuance", {
+    asset,
+    quantity: "0",
+    description: "lock_description",
+    sat_per_vbyte: String(satPerVbyte),
+    verbose: "true",
+    exclude_utxos_with_balances: "true",
+  });
+  const psbt = buildPlainPsbt(compose);
+  const signed = await wallet.signPsbt(psbt, { [source]: compose.inputs_values.map((_, i) => i) });
+  const final = finalize(signed);
+  const txid = await wallet.broadcast(final.hex);
+  return txid || final.txid;
 }
 
 /**
