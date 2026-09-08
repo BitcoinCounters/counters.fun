@@ -38,7 +38,7 @@ export function PriceTicker({ placement = "header" }: { placement?: "header" | "
   const usd = (v: number, digits: number) => v.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
   const pct = (v: number | null) => (v === null ? "—" : `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`);
   return (
-    <div className={placement === "header" ? "hidden items-center gap-2 nav:flex" : "flex items-center gap-2"}>
+    <div className={placement === "header" ? "hidden items-center gap-2 nav:flex" : "flex flex-wrap items-center gap-2"}>
       <Pill icon="₿" tone="text-gold" value={`$${usd(prices.btc.usd, 0)}`} change={prices.btc.change30d} title={copy.prices.btc(pct(prices.btc.change24h), prices.btc.source)} />
       {prices.xcp && (
         <Pill
@@ -56,7 +56,7 @@ export function PriceTicker({ placement = "header" }: { placement?: "header" | "
 
 function Pill({ icon, tone, value, change, sub, title }: { icon: string; tone: string; value: string; change: number | null; sub?: string; title: string }) {
   return (
-    <span title={title} className="flex items-center gap-1.5 rounded-full border border-line bg-card px-2.5 py-1 font-mono text-[11px] text-ink">
+    <span title={title} className="flex items-center gap-1.5 whitespace-nowrap rounded-full border border-line bg-card px-2.5 py-1 font-mono text-[11px] text-ink">
       <span className={`font-semibold ${tone}`}>{icon}</span>
       <span>{value}</span>
       {change !== null && (
