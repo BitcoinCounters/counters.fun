@@ -5,6 +5,8 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { WalletButton } from "@/components/wallet-button";
 import { AboutPanel } from "@/components/about-panel";
+import { SearchBox } from "@/components/search-box";
+import { PriceTicker } from "@/components/price-ticker";
 import { copy } from "@content/copy";
 
 const NAV = copy.nav;
@@ -56,6 +58,8 @@ export function SiteHeader() {
         </nav>
 
         <div className="ml-auto flex items-center gap-2">
+          <SearchBox />
+          <PriceTicker />
           <AboutPanel />
           <WalletButton />
           {/* Below the nav breakpoint the links are hidden, and without this

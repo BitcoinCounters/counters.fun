@@ -14,6 +14,7 @@ import {
   heaviestCounters,
   mintingCounters,
   pooledCounters,
+  searchCounters,
   stats,
   unpooledCounters,
   type PooledSort,
@@ -54,6 +55,13 @@ export function countersRoutes(): ReadApp {
   });
 
   app.get("/stats", async (c) => J(c, { result: await stats(c.env.DB) }, 30));
+
+  /** Name or number. Short, uppercase, on-chain only. */
+  app.get("/search", async (c) => {
+    const q = (c.req.query("q") ?? "").trim().toUpperCase().slice(0, 40);
+    if (q.length < 1) return J(c, { result: [] });
+    return J(c, { result: await searchCounters(c.env.DB, q) }, 10);
+  });
 
   /**
    * One counter. A pointer-like counter is not 404 — it exists, it is just

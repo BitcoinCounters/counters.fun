@@ -11,6 +11,7 @@
  */
 
 import { q, one } from "#api/db";
+const query = q;
 
 /** The predicate, named once so a new query cannot spell it differently. */
 const ON_CHAIN = `c.is_pointer_like = 0 AND c.size > 0`;
@@ -270,4 +271,28 @@ export async function stats(db: D1Database): Promise<Stats> {
     counters_indexed: Number(kv.get("counters_indexed") ?? 0),
     synced_at: Number(kv.get("synced_at") ?? 0),
   };
+}
+
+/**
+ * Counters whose asset name contains `q`, or the counter with that number.
+ * On-chain only, originals only, LP tokens excluded — the same rules as the
+ * listings, because a search result is a listing of one.
+ */
+export function searchCounters(db: D1Database, q: string, limit = 8): Promise<CounterRow[]> {
+  const needle = `%${q.replace(/[%_]/g, "")}%`;
+  const asNumber = /^\d+$/.test(q) ? Number(q) : -1;
+  return query<CounterRow>(
+    db,
+    `SELECT ${COUNTER_COLUMNS} FROM counters c
+      WHERE ${ON_CHAIN}
+        AND ${NOT_AN_LP_TOKEN}
+        AND ${ORIGINAL_ONLY}
+        AND (c.asset LIKE ?1 OR c.asset_longname LIKE ?1 OR c.number = ?2)
+      ORDER BY CASE WHEN c.number = ?2 THEN 0 WHEN c.asset LIKE ?3 THEN 1 ELSE 2 END, c.number DESC
+      LIMIT ?4`,
+    needle,
+    asNumber,
+    `${q.replace(/[%_]/g, "")}%`,
+    limit,
+  );
 }

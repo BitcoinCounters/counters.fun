@@ -30,7 +30,7 @@ app.get("/", (c) =>
     name: "counters.fun",
     what: "counters with XCP liquidity pools",
     rule: "only counters whose file is on Bitcoin are served",
-    routes: ["/counters", "/counters/:id", "/counters/:id/pool", "/counters/:id/history", "/activity", "/stats", "/content/:n", "/preview/:n"],
+    routes: ["/counters", "/counters/:id", "/counters/:id/pool", "/counters/:id/history", "/activity", "/stats", "/search", "/content/:n", "/preview/:n"],
   }),
 );
 
