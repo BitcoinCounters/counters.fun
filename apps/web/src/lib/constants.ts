@@ -7,8 +7,16 @@
  * something has gone wrong with the premise.
  */
 
-/** Counterparty Core v2 — balances, quotes, composes. Browser talks to it directly. */
-export const COUNTERPARTY_API_BASE = "https://api.counterparty.io:4000/v2";
+/**
+ * Counterparty Core v2 — balances, quotes, composes, fee estimates, relay.
+ * Read only by the same-origin proxy in `app/api/cp`, so this is a server-side
+ * setting: `COUNTERPARTY_API_BASE` in the environment, and the node on this
+ * machine when unset. Point it at `https://api.counterparty.io:4000/v2` to
+ * use the public node instead.
+ */
+export const COUNTERPARTY_API_BASE = (
+  process.env.COUNTERPARTY_API_BASE ?? "http://127.0.0.1:4000/v2"
+).replace(/\/+$/, "");
 
 /** This site's own worker: the counters × pools join and the content proxy. */
 export const COUNTERS_API_BASE =

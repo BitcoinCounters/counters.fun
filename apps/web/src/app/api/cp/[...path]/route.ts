@@ -8,10 +8,13 @@
  * fit in a query string, so it has to be a POST with a form body, which
  * Counterparty accepts but a cross-origin preflight would not survive.
  *
- * The allowlist is deliberately short. This proxy carries reads and composes;
- * it never carries a broadcast. An unsigned transaction passing through
- * infrastructure is a transaction that infrastructure could alter, so signing
- * and broadcasting stay between the wallet and the node.
+ * The allowlist is deliberately short: reads, composes, a fee estimate, and
+ * the relay of an already-signed transaction. Signing never passes through
+ * here — a signed transaction cannot be altered in transit, an unsigned one
+ * could — so what the proxy relays is exactly what the wallet produced. The
+ * relay exists because this site runs against its own node, and one's own
+ * node is a better first hop than a third party's Esplora; Esplora stays as
+ * the fallback (lib/wallet/broadcast.ts).
  */
 
 import { COUNTERPARTY_API_BASE } from "@/lib/constants";
@@ -30,7 +33,11 @@ const READ_ALLOWED: RegExp[] = [
   /^pools\/[^/]+\/[^/]+\/quote$/,
   /^pools\/[^/]+\/[^/]+\/quote\/deposit$/,
   /^pools\/[^/]+\/[^/]+\/quote\/withdraw$/,
+  /^bitcoin\/estimatesmartfee$/, // sat/kB from the node's own bitcoind
 ];
+
+/** POSTs other than composes. */
+const POST_ALLOWED = new Set(["bitcoin/transactions"]); // sendrawtransaction of a signed hex
 
 /** Composes. Each returns an unsigned transaction; none of them move anything. */
 const COMPOSE_ALLOWED = new Set(["issuance", "fairminter", "pooldeposit", "poolwithdraw"]);
@@ -41,6 +48,7 @@ function allowed(path: string[], method: string): boolean {
   if (method === "GET") return READ_ALLOWED.some((re) => re.test(joined));
 
   if (method === "POST") {
+    if (POST_ALLOWED.has(joined)) return true;
     // addresses/<addr>/compose/<type>
     return (
       path.length === 4 &&
