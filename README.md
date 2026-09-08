@@ -75,8 +75,23 @@ the cache is write-once and never invalidated.
   the first section comes from.
 - `/c/[id]` — the counter itself, its pool, and provenance (sha256, rolling
   hash, block, reveal size, miner fee) verifiable against the chain.
-- `/mint` — inscribe a file and issue the asset that owns it. Freeform.
-- `/pool/create` — open an XCP pool, or add to one.
+- `/mint` — three things, one commit/reveal path: a **counter** (a new asset
+  whose description is the file; leave the name empty and a free numeric one
+  is drawn client-side — Core never names an asset for you), a
+  **reinscription** (a new file on an asset you own, quantity 0), or a
+  **fairminter deploy** whose description is the file, so the deploy is
+  itself the counter. Two presets: **XCP-69** fixes every parameter to
+  xcp.fun's template (69M at 0.01 XCP per 1,000, 31M + the raised XCP open
+  the pool at soft cap, LP burned by consensus — such a launch never touches
+  `/pool/create`); **custom** exposes them all, starting from those numbers.
+  Before anything is signed the form checks the name's shape and existence,
+  the 0.5 XCP a named asset burns, the BTC at the address, and the reveal's
+  exact weight against the 400k WU relay cap. An unfinished mint (commit on
+  chain, reveal not) is kept in `localStorage` and offered for resumption.
+- `/pool/create` — open an XCP pool or add to one (either side can be typed;
+  the node prices the other), withdraw by percentage, and lock your LP at the
+  unspendable address. Pairs are oriented by *name*: Core sorts every pair,
+  so a counter that sorts after "XCP" is `asset_b` in its own pool.
 - `/activity`, `/docs`.
 
 ## Wallets
@@ -204,6 +219,27 @@ mistake becomes a clear error rather than that one.
   countdown may only trust it while the status is `open`.
 - **LP tokens can themselves be counters.** Counter #163 is
   `A18189972090142917414`, MEMENOME's own LP token carrying 30 bytes of text.
+- **Core sorts every pair.** `pools/XCP/MEMENOME` and `pools/MEMENOME/XCP`
+  return the same record with `asset_a: MEMENOME`, and quotes come back in
+  the same sorted order. Never read a side by position — use `orientPool` /
+  `orientDepositQuote` from `@counters/core/pool`.
+- **A blank asset name is "too short".** Core does not auto-name numeric
+  assets; `randomNumericAsset()` draws one in (26^12, 2^64) client-side.
+- **The API caches whole responses.** `caches.default` in the worker keeps
+  headers too, and wrangler persists it under `.wrangler/state/v3/cache`
+  across restarts. A changed `WEB_ORIGIN` does not reach already-cached
+  content until that store is cleared.
+- **Fee rates go below 1 sat/vB.** Core accepts any float `sat_per_vbyte`
+  (including 0 — refused client-side, `HARD_MIN_RATE`); this node relays
+  down to 0 and Bitcoin Core 29.1+ defaults to 0.1. Presets and floors come
+  from the site's own bitcoind via `/api/fees` (Counterparty's
+  `estimatesmartfee` proxy floors at 1,024 sat/kB and hides them), with the
+  local mempool backend's `fees/precise` as the fallback. Small reveals at
+  low rates sit on the 330-sat commit floor; the form shows the effective
+  rate rather than the asked one. Nothing off this machine is asked.
+- **A 404 is an answer; a failure is not.** `fetchPool`/`fetchAsset` return
+  `null` only on 404 and throw otherwise, so an outage reads as "could not
+  check", never as "no pool exists — this deposit sets the price".
   Listings exclude any asset that appears as a pool's `lp_asset`.
 - **Minting requires a taproot account** in either wallet — the commit pays a
   taproot script whose leaf names the signer's own key. Checked before
