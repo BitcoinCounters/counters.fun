@@ -159,7 +159,9 @@ function PoolPanel({
           tone={change === null ? "faint" : change >= 0 ? "good" : "bad"}
         />
         <Figure label="depth" value={`${fmtCompact(depth)} XCP`} />
-        <Figure label="reserve" value={fmtCompact(tokens)} />
+        {/* The token side in the token's own units — an indivisible counter's
+            raw reserve IS its unit count. */}
+        <Figure label="reserve" value={fmtCompact(tokens, divisible)} />
       </div>
 
       {/*
