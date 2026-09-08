@@ -81,12 +81,15 @@ export function SiteHeader() {
         </div>
       </div>
 
-      {/* Search gets its own row: a wide field reads as a search, not a filter. */}
-      <div className="border-t border-line/60">
-        <div className="mx-auto w-full max-w-[1120px] px-5 py-2">
-          <SearchBox wide />
+      {/* Search gets its own row: a wide field reads as a search, not a
+          filter. The home page places it under its stats row instead. */}
+      {pathname !== "/" && (
+        <div className="border-t border-line/60">
+          <div className="mx-auto w-full max-w-[1120px] px-5 py-2">
+            <SearchBox wide />
+          </div>
         </div>
-      </div>
+      )}
 
       {open && (
         <nav className="border-t border-line bg-bg px-5 py-2 nav:hidden">
