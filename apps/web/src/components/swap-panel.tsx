@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useWallet } from "@/lib/wallet/wallet-context";
 import { big, parseUnitsToRaw } from "@counters/core/numeric";
+import { inputForOutput, orientPool, type Pool } from "@counters/core/pool";
 import { cpCompose, cpGet, fetchBalance } from "@/lib/cp";
 import { describeError, isCancellation } from "@/lib/errors";
 import { withSlippage, rawToUnits } from "@/lib/pool-compose";
@@ -28,6 +29,11 @@ import { copy } from "@content/copy";
  * which already accounts for pool and book) and the limit, which is the
  * quote less the slippage the person accepts. The limit is not a floor on
  * what they get; it is the price past which the pool stops filling.
+ *
+ * Either side can lead. The node only quotes from the amount SOLD, so a
+ * typed receive amount is inverted locally through the pool's constant
+ * product (fee on the input, as consensus applies it), then confirmed with
+ * a real quote and nudged up if the book or rounding left it short.
  */
 
 interface SwapQuote {
@@ -51,6 +57,9 @@ export function SwapPanel({ asset, divisible }: { asset: string; divisible: bool
 
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [amount, setAmount] = useState("");
+  const [receive, setReceive] = useState("");
+  const [lead, setLead] = useState<"pay" | "receive">("pay");
+  const [pool, setPool] = useState<Pool | null>(null);
   const [slippage, setSlippage] = useState(1);
   const [customSlippage, setCustomSlippage] = useState("");
   const [expiry, setExpiry] = useState(1);
@@ -67,6 +76,55 @@ export function SwapPanel({ asset, divisible }: { asset: string; divisible: bool
   const giveDecimals = giveAsset === "XCP" || divisible ? 8 : 0;
   const getDecimals = getAsset === "XCP" || divisible ? 8 : 0;
   const rawGive = useMemo(() => parseUnitsToRaw(amount, giveDecimals) ?? 0n, [amount, giveDecimals]);
+  const rawReceive = useMemo(() => parseUnitsToRaw(receive, getDecimals) ?? 0n, [receive, getDecimals]);
+
+  useEffect(() => {
+    let cancelled = false;
+    cpGet<Pool>(`pools/${encodeURIComponent(asset)}/XCP?verbose=true`)
+      .then((p) => !cancelled && setPool(p))
+      .catch(() => !cancelled && setPool(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [asset, txid]);
+
+  // A typed receive amount: invert through the reserves, then let the node
+  // confirm. If its quote lands short (book orders, integer rounding), scale
+  // the input up by the shortfall and ask once more.
+  useEffect(() => {
+    if (lead !== "receive") return;
+    if (rawReceive <= 0n || !pool) {
+      if (rawReceive <= 0n) setAmount("");
+      return;
+    }
+    const oriented = orientPool(pool, asset);
+    if (!oriented) return;
+    const [reserveIn, reserveOut] = side === "buy" ? [oriented.xcpReserve, oriented.tokenReserve] : [oriented.tokenReserve, oriented.xcpReserve];
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      let input = inputForOutput(rawReceive, reserveIn, reserveOut, 50);
+      if (input === null) {
+        if (!cancelled) setAmount("");
+        return;
+      }
+      try {
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          const q = await cpGet<SwapQuote>(`pools/${encodeURIComponent(giveAsset)}/${encodeURIComponent(getAsset)}/quote?quantity=${input}`);
+          if (cancelled) return;
+          const got = big(q.estimated_output);
+          if (got >= rawReceive || got <= 0n) break;
+          input = (input * rawReceive + got - 1n) / got;
+        }
+      } catch {
+        // The forward quote below will report the failure.
+      }
+      if (!cancelled) setAmount(rawToUnits(input, giveDecimals));
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [lead, rawReceive, pool, asset, side, giveAsset, getAsset, giveDecimals]);
   const effectiveSlippage = customSlippage ? Math.min(50, Math.max(0, Number(customSlippage) || 0)) : slippage;
 
   useEffect(() => {
@@ -95,6 +153,7 @@ export function SwapPanel({ asset, divisible }: { asset: string; divisible: bool
         .then((q) => {
           if (cancelled) return;
           setQuote(q);
+          if (lead === "pay") setReceive(rawToUnits(big(q.estimated_output), getDecimals));
         })
         .catch(() => !cancelled && setQuote(null))
         .finally(() => !cancelled && setQuoting(false));
@@ -103,11 +162,22 @@ export function SwapPanel({ asset, divisible }: { asset: string; divisible: bool
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [giveAsset, getAsset, rawGive]);
+  }, [giveAsset, getAsset, rawGive, lead, getDecimals]);
 
   const estimated = quote ? big(quote.estimated_output) : 0n;
   const minimum = withSlippage(estimated, effectiveSlippage);
   const remainder = quote ? big(quote.give_remaining) : 0n;
+
+  // Buying an indivisible token: the pool sells whole units only and takes
+  // just the input those units cost; what is left of the order comes back at
+  // expiry. Say what the whole units actually cost, and offer to pay exactly that.
+  const exactInput = useMemo(() => {
+    if (!quote || !pool || side !== "buy" || divisible || estimated <= 0n) return null;
+    const oriented = orientPool(pool, asset);
+    if (!oriented) return null;
+    const exact = inputForOutput(estimated, oriented.xcpReserve, oriented.tokenReserve, quote.fee_bps || 50);
+    return exact !== null && exact < rawGive ? exact : null;
+  }, [quote, pool, side, divisible, estimated, asset, rawGive]);
   const short = balance !== null && rawGive > balance;
   const ready = wallet.address !== null && rawGive > 0n && quote !== null && estimated > 0n && !short && fee.ok && !busy && !quoting;
 
@@ -165,7 +235,7 @@ export function SwapPanel({ asset, divisible }: { asset: string; divisible: bool
           {(["buy", "sell"] as const).map((s) => (
             <button
               key={s}
-              onClick={() => { setSide(s); setAmount(""); setConfirming(false); setError(null); }}
+              onClick={() => { setSide(s); setAmount(""); setReceive(""); setLead("pay"); setConfirming(false); setError(null); }}
               className={`rounded-md px-3 py-1 font-mono text-[11px] uppercase tracking-[0.1em] ${side === s ? "bg-copper-ghost text-copper2" : "text-faint"}`}
             >
               {copy.swap[s]} {asset}
@@ -180,7 +250,7 @@ export function SwapPanel({ asset, divisible }: { asset: string; divisible: bool
           <input
             value={amount}
             inputMode="decimal"
-            onChange={(e) => { setAmount(e.target.value.replace(/[^\d.]/g, "")); setConfirming(false); }}
+            onChange={(e) => { setLead("pay"); setAmount(e.target.value.replace(/[^\d.]/g, "")); setConfirming(false); }}
             placeholder="0"
             className={`min-w-0 flex-1 bg-transparent font-mono text-xl outline-none placeholder:text-faint ${short ? "text-bad" : "text-ink"}`}
           />
@@ -190,7 +260,7 @@ export function SwapPanel({ asset, divisible }: { asset: string; divisible: bool
           balance {balance === null ? "—" : fmtQty(balance, giveDecimals === 8)}
           {short && <span className="ml-2 text-bad">not enough</span>}
           {balance !== null && balance > 0n && (
-            <button onClick={() => setAmount(rawToUnits(balance, giveDecimals))} className="ml-2 text-faint hover:text-copper2">
+            <button onClick={() => { setLead("pay"); setAmount(rawToUnits(balance, giveDecimals)); }} className="ml-2 text-faint hover:text-copper2">
               max
             </button>
           )}
@@ -198,9 +268,15 @@ export function SwapPanel({ asset, divisible }: { asset: string; divisible: bool
       </div>
 
       <div className="mt-2 rounded-xl border border-line bg-bg2 p-3">
-        <div className="mb-1 font-mono text-[10px] uppercase tracking-[0.14em] text-faint">{copy.swap.youReceive}</div>
+        <div className="mb-1 font-mono text-[10px] uppercase tracking-[0.14em] text-faint">{lead === "receive" ? copy.swap.youReceiveExact : copy.swap.youReceive}</div>
         <div className="flex items-baseline justify-between gap-3">
-          <span className="font-mono text-xl text-ink">{quoting ? <span className="text-faint">{copy.swap.quoting}</span> : quote ? fmtQty(estimated, getDecimals === 8) : "—"}</span>
+          <input
+            value={receive}
+            inputMode="decimal"
+            onChange={(e) => { setLead("receive"); setReceive(e.target.value.replace(/[^\d.]/g, "")); setConfirming(false); }}
+            placeholder="0"
+            className={`min-w-0 flex-1 bg-transparent font-mono text-xl outline-none placeholder:text-faint ${quoting && lead === "pay" ? "text-faint" : "text-ink"}`}
+          />
           <span className="font-mono text-sm text-copper2">{getAsset}</span>
         </div>
         {quote && estimated > 0n && (
@@ -244,6 +320,14 @@ export function SwapPanel({ asset, divisible }: { asset: string; divisible: bool
           </Row>
           <p className="text-[11px] leading-relaxed text-faint">{copy.swap.expiryHint}</p>
           {remainder > 0n && <p className="text-[11px] leading-relaxed text-gold">{copy.swap.remainder(fmtQty(remainder, giveDecimals === 8), giveAsset)}</p>}
+          {exactInput !== null && (
+            <p className="text-[11px] leading-relaxed text-gold">
+              {copy.swap.wholeUnits(fmtQty(estimated, false), asset, fmtQty(exactInput, true))}{" "}
+              <button onClick={() => { setLead("pay"); setAmount(rawToUnits(exactInput, 8)); }} className="font-mono text-copper2 underline-offset-2 hover:underline">
+                {copy.swap.useExact}
+              </button>
+            </p>
+          )}
           {quote.price_impact >= 5 && <p className="text-[11px] leading-relaxed text-bad">{copy.swap.highImpact(quote.price_impact.toFixed(1))}</p>}
           <FeeRateField fee={fee} xcpWallet={wallet.adapter?.id === "xcp"} />
         </div>

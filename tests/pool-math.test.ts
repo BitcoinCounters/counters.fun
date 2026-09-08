@@ -119,3 +119,21 @@ describe("against the live MEMENOME/XCP pool", () => {
     if (node > 0n) expect(node).toBeGreaterThanOrEqual(local - local / 1000n);
   }, 30_000);
 });
+
+describe("swap input for a wanted output", () => {
+  it("inverts the constant product with the fee on the input", async () => {
+    const { inputForOutput } = await import("../packages/counters/src/pool");
+    const reserveIn = 44688202231n; // XCP
+    const reserveOut = 4981932395674824n; // MEMENOME
+    const want = 11067821046343n; // what 1 XCP bought in the live quote
+    const input = inputForOutput(want, reserveIn, reserveOut, 50)!;
+    // Forward through the same pool formula: output must reach the target.
+    const keep = input * 9950n / 10000n;
+    const out = (keep * reserveOut) / (reserveIn + keep);
+    expect(out >= want).toBe(true);
+    // And not wildly over: within a few parts per million of 1 XCP.
+    expect(Number(input) / 1e8).toBeGreaterThan(0.9999);
+    expect(Number(input) / 1e8).toBeLessThan(1.0002);
+    expect(inputForOutput(reserveOut, reserveIn, reserveOut, 50)).toBeNull();
+  });
+});
