@@ -24,7 +24,7 @@
 
 export const copy = {
   site: {
-    title: "counters.fun — counters with XCP liquidity",
+    title: "counters.fun",
     description:
       "Counters are files in Bitcoin witness data, owned through Counterparty assets. This is where they get markets. Nothing here is hosted: every image is read out of a Bitcoin block.",
     ogTitle: "counters.fun",

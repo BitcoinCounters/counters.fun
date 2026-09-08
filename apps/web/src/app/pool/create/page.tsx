@@ -3,7 +3,7 @@ import { copy } from "@content/copy";
 import { fill } from "@content/fill";
 
 export const metadata = {
-  title: "Create an XCP pool — counters.fun",
+  title: "counters.fun",
   description: "Open a counter's constant-product pool against XCP, or add to one.",
 };
 
