@@ -270,6 +270,8 @@ export const copy = {
       "signing-commit": "Approve the commit in your wallet",
       "broadcasting-commit": "Broadcasting the commit…",
       "signing-reveal": "Approve the reveal in your wallet",
+      "awaiting-commit":
+        "Waiting for the commit to be mined — Slipstream cannot price the reveal before then",
       "broadcasting-reveal": "Broadcasting the reveal…",
       done: "Done",
     },

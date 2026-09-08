@@ -39,9 +39,11 @@ import {
   unsignedRevealTxid,
 } from "./psbt";
 import { STANDARD_WITNESS_LIMIT_WU } from "@/lib/constants";
-import { cpCompose } from "@/lib/cp";
+import { cpCompose, fetchConfirmations } from "@/lib/cp";
 import { randomNumericAsset } from "@counters/core/assetnames";
 import { HARD_MIN_RATE } from "@counters/core/fees";
+import { MAX_WEIGHT, meetsFloor, routeFor } from "@counters/core/slipstream";
+import { slipstreamRates, slipstreamSubmit } from "@/lib/slipstream";
 import { fairminterComposeParams, fairminterProblems, type FairminterParams } from "@counters/core/fairminter";
 
 /**
@@ -84,6 +86,9 @@ export type EnvelopeStyle = "counterparty" | "counterparty/ord";
  *   transaction with the parameters the person chose.
  */
 export type MintMode = "counter" | "reinscribe" | "fairminter";
+
+/** Where a signed reveal is sent. See `MintRequest.route`. */
+export type RevealRoute = "public" | "slipstream";
 export type FairminterPreset = "xcp69" | "custom";
 
 export interface MintRequest {
@@ -108,6 +113,18 @@ export interface MintRequest {
   lockQuantity: boolean;
   satPerVbyte: number;
   envelope: EnvelopeStyle;
+  /**
+   * Where the reveal goes. `public` is this node's own relay; `slipstream`
+   * hands it to MARA, which is the ONLY route for a reveal past the standard
+   * relay cap and an option for any other. Defaults to `public`.
+   *
+   * A Slipstream reveal cannot be sent when it is signed: MARA prices a reveal
+   * from the chain and from its own submissions, never from the public mempool,
+   * so the commit must be MINED first. Choosing this route for a mint that did
+   * not need it therefore buys a confirmation wait the public path does not
+   * have.
+   */
+  route?: RevealRoute;
   /** fairminter only: which shape, for the receipt and the xcp.fun link. */
   preset?: FairminterPreset;
   /** fairminter only: the sale, in raw units. Built by the form from the preset or its fields. */
@@ -120,6 +137,8 @@ export type MintStage =
   | "signing-commit"
   | "broadcasting-commit"
   | "signing-reveal"
+  /** Slipstream only: MARA cannot price the reveal until the commit is mined. */
+  | "awaiting-commit"
   | "broadcasting-reveal"
   | "done";
 
@@ -239,6 +258,19 @@ export async function mintCounter(
   onStage?: (stage: MintStage) => void,
   onRevealPsbt?: (psbt: string, plan: MintPlan) => void | Promise<void>,
 ): Promise<MintResult> {
+  // Slipstream's ACCEPTANCE floor, checked before composing because the commit
+  // output is sized here for the reveal's fee and cannot be resized once the
+  // commit is on chain. `submitFloor` is the gate; `mineable` is only how long
+  // the wait will be. A rate between them is accepted and then waits for the
+  // market — legitimate, and not something to silently round away — but a rate
+  // BELOW the floor buys a reveal MARA will never take, with the commit spent.
+  if (req.route === "slipstream") {
+    const rates = await slipstreamRates().catch(() => null);
+    if (rates && !meetsFloor(req.satPerVbyte, rates)) {
+      throw new BelowSlipstreamFloorError(req.satPerVbyte, rates.submitFloor, rates.mineable);
+    }
+  }
+
   onStage?.("composing");
   const { compose, asset, lpAsset } = await composeMint(req);
   const fairminter = req.fairminter ? { ...req.fairminter, lpAsset } : undefined;
@@ -249,10 +281,17 @@ export async function mintCounter(
     );
   }
 
-  // Refused here, before the commit exists, rather than after it is on chain:
-  // a reveal past the standard relay cap will not propagate at any fee rate.
+  // Decided here, before the commit exists, rather than after it is on chain.
+  // Past the standard relay cap the public network will not carry the reveal at
+  // any fee rate — the limit is policy on witness weight, not price — so the
+  // choice of route has to be settled while nothing has been signed.
   const revealWeight = revealWeightOf(compose);
-  if (revealWeight > STANDARD_WITNESS_LIMIT_WU) {
+  const fit = routeFor(revealWeight);
+  if (fit === "too-large") {
+    // Beyond MARA's own policy cap. No route exists; refuse before spending.
+    throw new OversizedRevealError(revealWeight);
+  }
+  if (fit === "slipstream-only" && req.route !== "slipstream") {
     throw new NonStandardRevealError(revealWeight, "");
   }
 
@@ -330,7 +369,7 @@ export async function mintCounter(
 
   onStage?.("signing-reveal");
   try {
-    const reveal = await finishReveal(wallet, req.source, revealPsbt, onStage);
+    const reveal = await finishReveal(wallet, req.source, revealPsbt, onStage, req.route);
     onStage?.("done");
     return {
       ...plan,
@@ -363,12 +402,20 @@ export async function finishReveal(
   source: string,
   revealPsbt: string,
   onStage?: (stage: MintStage) => void,
+  route: RevealRoute = "public",
 ): Promise<{ txid: string; hex: string; weight: number }> {
   // The reveal is a taproot script-path spend: the wallet signs input 0 against
   // the tapleaf that names its own key. Both wallets handle `tapLeafScript` —
   // it is the reason the envelope was re-keyed in the first place.
   const signed = await wallet.signPsbt(revealPsbt, { [source]: [0] });
   const final = finalize(signed);
+
+  if (route === "slipstream") {
+    if (final.weight > MAX_WEIGHT) {
+      throw new OversizedRevealError(final.weight, final.hex);
+    }
+    return sendViaSlipstream(final, onStage);
+  }
 
   // A reveal past the standard relay cap will not propagate no matter how it is
   // fee-rated — the limit is policy on witness weight, not price. Saying so
@@ -380,6 +427,53 @@ export async function finishReveal(
   onStage?.("broadcasting-reveal");
   const txid = await wallet.broadcast(final.hex);
   return { txid: txid || final.txid, hex: final.hex, weight: final.weight };
+}
+
+/** How long to wait for the commit before handing the reveal back to be retried. */
+const CONFIRM_TIMEOUT_MS = 6 * 60 * 60_000;
+const CONFIRM_POLL_MS = 30_000;
+
+/**
+ * Wait for the commit to be mined, then hand the reveal to MARA.
+ *
+ * The wait is not politeness. Slipstream resolves a transaction's inputs from
+ * the chain and from its own submissions, and NEVER from the public mempool —
+ * our commit went out over public relay, so MARA cannot see it until it is
+ * MINED. A reveal submitted sooner prices as fee 0 and is refused ("Fee rate of
+ * 0 is below the threshold"), however patiently it is retried.
+ *
+ * Polls this site's own node, which is the one that relayed the commit and can
+ * see a transaction that never went near MARA. On timeout it throws rather than
+ * submitting anyway: the reveal is already stored, so a timeout costs a retry,
+ * not the coins.
+ */
+async function sendViaSlipstream(
+  final: { txid: string; hex: string; weight: number },
+  onStage?: (stage: MintStage) => void,
+): Promise<{ txid: string; hex: string; weight: number }> {
+  const commitTxid = bytesToHex(RawTx.decode(hexToBytes(final.hex)).inputs[0].txid);
+
+  onStage?.("awaiting-commit");
+  const deadline = Date.now() + CONFIRM_TIMEOUT_MS;
+  for (;;) {
+    // A failed poll is not evidence of anything; only a confirmation counts.
+    const confirmations = await fetchConfirmations(commitTxid).catch(() => null);
+    if ((confirmations ?? 0) > 0) break;
+    if (Date.now() >= deadline) {
+      throw new SlipstreamPendingError(final.weight, final.hex, commitTxid);
+    }
+    await new Promise((r) => setTimeout(r, CONFIRM_POLL_MS));
+  }
+
+  onStage?.("broadcasting-reveal");
+  const sent = await slipstreamSubmit(final.hex);
+  if (sent.verdict === "rejected") {
+    throw new SlipstreamRejectedError(sent.message, final.hex);
+  }
+  // `accepted` and `probably-accepted` both mean stop uploading and watch the
+  // chain: a 524 after a full upload is what every accepted large submission
+  // looks like, and re-sending megabytes on it achieves nothing.
+  return final;
 }
 
 /** What Core's reveal pays out — everything above it in the commit is fee. */
@@ -436,6 +530,81 @@ export class RevealPendingError extends Error {
         "can be signed again.",
     );
     this.name = "RevealPendingError";
+  }
+}
+
+/**
+ * A reveal past MARA's own policy cap of ~99.8% of a block. Nothing can carry
+ * it — not the public network, not Slipstream — so the mint is refused before
+ * any money moves. The only remedy is a smaller file.
+ */
+export class OversizedRevealError extends Error {
+  constructor(
+    readonly weight: number,
+    readonly hex: string = "",
+  ) {
+    super(
+      `This reveal is ${weight.toLocaleString("en-US")} weight units, past the ` +
+        `${MAX_WEIGHT.toLocaleString("en-US")} limit Slipstream itself enforces. No route can ` +
+        "carry it. Use a smaller file.",
+    );
+    this.name = "OversizedRevealError";
+  }
+}
+
+/**
+ * The commit is on chain but has not been mined within the waiting window, so
+ * Slipstream still cannot price the reveal. Nothing is lost: the reveal is
+ * signed and stored, and the commit stays spendable by it alone.
+ */
+export class SlipstreamPendingError extends Error {
+  constructor(
+    readonly weight: number,
+    readonly hex: string,
+    readonly commitTxid: string,
+  ) {
+    super(
+      "The commit has not been mined yet, so Slipstream cannot price the reveal. The reveal is " +
+        "signed and stored — retry once the commit is in a block.",
+    );
+    this.name = "SlipstreamPendingError";
+  }
+}
+
+/**
+ * The chosen fee rate is below Slipstream's ACCEPTANCE floor.
+ *
+ * Thrown before composing, because the commit output is sized for the reveal's
+ * fee and cannot be resized once the commit is on chain — minting anyway would
+ * buy a reveal MARA will never take, with the coins already committed.
+ *
+ * Distinct from paying between the floor and the mineable rate, which is
+ * legitimate: that submission is accepted and waits for the market to come
+ * down. Only the floor is a gate.
+ */
+export class BelowSlipstreamFloorError extends Error {
+  constructor(
+    readonly rate: number,
+    readonly submitFloor: number,
+    readonly mineable: number,
+  ) {
+    super(
+      `Slipstream will not accept a submission under ${submitFloor} sat/vB, and this mint is ` +
+        `paying ${rate}. It is currently mining at ${mineable} sat/vB — anything between the two ` +
+        "is accepted and then waits for the market.",
+    );
+    this.name = "BelowSlipstreamFloorError";
+  }
+}
+
+/** MARA refused the reveal outright. Retrying the same bytes cannot help. */
+export class SlipstreamRejectedError extends Error {
+  constructor(
+    readonly reason: string,
+    readonly hex: string,
+  ) {
+    super(`Slipstream refused the reveal: ${reason}`);
+    this.name = "SlipstreamRejectedError";
   }
 }
 
