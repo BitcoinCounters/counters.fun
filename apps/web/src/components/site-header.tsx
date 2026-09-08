@@ -26,18 +26,30 @@ export function SiteHeader() {
         </Link>
 
         <nav className="ml-1.5 hidden gap-1 nav:flex">
-          {NAV.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              aria-current={pathname === item.href ? "page" : undefined}
-              className={`rounded-md px-3 py-1.5 font-mono text-[12.5px] uppercase tracking-[0.06em] transition-colors hover:bg-card hover:text-ink ${
-                pathname === item.href ? "text-copper" : "text-dim"
-              }`}
-            >
-              {item.label}
-            </Link>
-          ))}
+          {NAV.map((item) =>
+            item.href.startsWith("http") ? (
+              <a
+                key={item.href}
+                href={item.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-md px-3 py-1.5 font-mono text-[12.5px] uppercase tracking-[0.06em] text-dim transition-colors hover:bg-card hover:text-ink"
+              >
+                {item.label}
+              </a>
+            ) : (
+              <Link
+                key={item.href}
+                href={item.href}
+                aria-current={pathname === item.href ? "page" : undefined}
+                className={`rounded-md px-3 py-1.5 font-mono text-[12.5px] uppercase tracking-[0.06em] transition-colors hover:bg-card hover:text-ink ${
+                  pathname === item.href ? "text-copper" : "text-dim"
+                }`}
+              >
+                {item.label}
+              </Link>
+            ),
+          )}
         </nav>
 
         <div className="ml-auto flex items-center gap-2">
@@ -64,18 +76,30 @@ export function SiteHeader() {
 
       {open && (
         <nav className="border-t border-line bg-bg px-5 py-2 nav:hidden">
-          {NAV.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              aria-current={pathname === item.href ? "page" : undefined}
-              className={`block rounded-md px-2 py-2.5 font-mono text-sm uppercase tracking-[0.06em] ${
-                pathname === item.href ? "text-copper" : "text-dim"
-              }`}
-            >
-              {item.label}
-            </Link>
-          ))}
+          {NAV.map((item) =>
+            item.href.startsWith("http") ? (
+              <a
+                key={item.href}
+                href={item.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block rounded-md px-2 py-2.5 font-mono text-sm uppercase tracking-[0.06em] text-dim"
+              >
+                {item.label}
+              </a>
+            ) : (
+              <Link
+                key={item.href}
+                href={item.href}
+                aria-current={pathname === item.href ? "page" : undefined}
+                className={`block rounded-md px-2 py-2.5 font-mono text-sm uppercase tracking-[0.06em] ${
+                  pathname === item.href ? "text-copper" : "text-dim"
+                }`}
+              >
+                {item.label}
+              </Link>
+            ),
+          )}
         </nav>
       )}
     </header>

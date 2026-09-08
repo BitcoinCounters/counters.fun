@@ -1,10 +1,11 @@
+import { Fragment } from "react";
 import Link from "next/link";
 import { getHome, getStats } from "@/lib/api";
 import { MintingCard, PooledCard, UnpooledCard, totalDepth } from "@/components/counter-card";
 import { Meter } from "@/components/meter";
 import { fmtCompact, fmtSize } from "@/lib/format";
 import { copy } from "@content/copy";
-import { fill } from "@content/fill";
+import { fillParagraphs } from "@content/fill";
 
 export const revalidate = 30;
 
@@ -31,7 +32,32 @@ export default async function HomePage() {
         <h1 className="mb-2 max-w-[20ch] font-mono text-[clamp(26px,4.4vw,40px)] font-semibold leading-[1.12] tracking-[-0.01em]">
           {copy.home.headline} <span className="text-dim">{copy.home.headlineDim}</span>
         </h1>
-        <p className="mb-9 max-w-[58ch] text-base text-dim">{fill(copy.home.lede)}</p>
+        <div className="mb-9 max-w-[58ch] space-y-4 text-base text-dim">
+          {fillParagraphs(copy.home.lede).map((segments, p) => (
+            <p key={p}>
+              {segments.map((segment, i) => {
+                const inner = segment.bold ? (
+                  <strong className="font-semibold text-ink">{segment.text}</strong>
+                ) : (
+                  segment.text
+                );
+                return segment.href ? (
+                  <a
+                    key={i}
+                    href={segment.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline decoration-copper/50 underline-offset-4 transition-colors hover:decoration-copper"
+                  >
+                    {inner}
+                  </a>
+                ) : (
+                  <Fragment key={i}>{inner}</Fragment>
+                );
+              })}
+            </p>
+          ))}
+        </div>
 
         <div className="flex flex-wrap items-end gap-9">
           <Stat label={copy.home.stats.pooled} value={stats.pooled} accent />
@@ -94,13 +120,19 @@ export default async function HomePage() {
         </Section>
       )}
 
-      <Section title={copy.home.unpooled.title} meta={copy.home.unpooled.meta(home.unpooled.length)}>
+      {/* Collapsed by default: the header and count stay visible, the grid
+          is a click away. Sixty-odd cards under one pool would otherwise
+          make the page look like it is about the wrong thing. */}
+      <CollapsibleSection
+        title={copy.home.unpooled.title}
+        meta={copy.home.unpooled.meta(home.unpooled.length)}
+      >
         <Grid>
           {home.unpooled.map((c) => (
             <UnpooledCard key={c.number} counter={c} />
           ))}
         </Grid>
-      </Section>
+      </CollapsibleSection>
     </>
   );
 }
@@ -138,6 +170,38 @@ function Section({
       </div>
       {children}
     </section>
+  );
+}
+
+/**
+ * A Section that starts closed. Native <details> so the page stays a server
+ * component and the state survives without JavaScript; the marker is drawn
+ * by hand so the header lines up with the sections above it.
+ */
+function CollapsibleSection({
+  title,
+  meta,
+  children,
+}: {
+  title: string;
+  meta?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <details className="group">
+      <summary className="mb-4 mt-12 flex cursor-pointer list-none items-baseline gap-3.5 select-none [&::-webkit-details-marker]:hidden">
+        <h2 className="font-mono text-sm font-semibold uppercase tracking-[0.14em]">{title}</h2>
+        <span className="h-px flex-1 bg-line" />
+        {meta && <span className="font-mono text-xs text-faint">{meta}</span>}
+        <span
+          aria-hidden
+          className="font-mono text-xs text-faint transition-transform group-open:rotate-90"
+        >
+          ›
+        </span>
+      </summary>
+      {children}
+    </details>
   );
 }
 

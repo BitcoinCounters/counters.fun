@@ -37,14 +37,15 @@ export const copy = {
     { href: "/pool/create", label: "Create LP" },
     { href: "/activity", label: "Activity" },
     { href: "/docs", label: "Docs" },
+    { href: "https://bitcoincounters.com", label: "BitcoinCounters" },
   ],
 
   home: {
-    eyebrow: "counters with XCP liquidity",
+    eyebrow: "trade counters",
     /** The second half renders in a dimmer colour. */
-    headline: "Files in Bitcoin,",
-    headlineDim: "with a market.",
-    lede: "A counter is a file in Bitcoin witness data, owned through a Counterparty asset and numbered from zero. Counterparty opens the pool by consensus. Nothing on this page is hosted — every image, page and program below was read out of a block.",
+    headline: "Counterparty Inscriptions",
+    headlineDim: "Marketplace",
+    lede: "A [**counter**](https://bitcoincounters.com) is an on chain inscription attached to a Counterparty Asset. Every image, text, audio, video or other file you see below is stored and read directly off the Bitcoin Blockchain.\n\nEvery counter is assigned an inscription number at birth",
 
     stats: {
       pooled: "pooled",
