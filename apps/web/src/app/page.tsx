@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { getHome, getStats } from "@/lib/api";
 import { MintingCard, PooledCard, UnpooledCard, totalDepth } from "@/components/counter-card";
-import { fmtCompact } from "@/lib/format";
+import { fmtCompact, fmtSize } from "@/lib/format";
+import { PriceTicker } from "@/components/price-ticker";
 import { copy } from "@content/copy";
 
 export const revalidate = 30;
@@ -21,6 +22,19 @@ export default async function HomePage() {
 
   return (
     <>
+      {/* One line: the prices, what is on Bitcoin, and the block. The
+          introduction lives behind "about" in the header. */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line py-4 font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
+        <PriceTicker placement="row" />
+        <span className="whitespace-nowrap">
+          <span className="text-[13px] font-semibold tracking-normal text-ink">{fmtSize(stats.bytes_on_chain)}</span> {copy.home.stats.bytes}
+        </span>
+        <span className="text-line">·</span>
+        <span className="whitespace-nowrap">
+          {copy.home.chainLine} <span className="text-[13px] font-semibold tracking-normal text-ink">{stats.tip.toLocaleString("en-US")}</span>
+        </span>
+      </div>
+
       <Section
         title={copy.home.pooled.title}
         meta={
