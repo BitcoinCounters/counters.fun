@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { getHome, getStats } from "@/lib/api";
 import { MintingCard, PooledCard, UnpooledCard, totalDepth } from "@/components/counter-card";
-import { fmtCompact, fmtSize } from "@/lib/format";
+import { fmtCompact } from "@/lib/format";
 import { copy } from "@content/copy";
 
 export const revalidate = 30;
@@ -21,22 +21,6 @@ export default async function HomePage() {
 
   return (
     <>
-      {/* One line. The introduction lives behind "about" in the header; what
-          the home page states up front is only what is true right now. The
-          counters figure is the protocol's own count, pointers included —
-          the listings below show the on-chain ones, which is a display rule. */}
-      <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1 border-b border-line py-5 font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
-        <StatInline value={stats.pooled} label={copy.home.stats.pooled} accent />
-        <Dot />
-        <StatInline value={stats.minting} label={copy.home.stats.minting} />
-        <Dot />
-        <StatInline value={stats.counters_total} label={copy.home.stats.counters} />
-        <Dot />
-        <StatInline value={fmtSize(stats.bytes_on_chain)} label={copy.home.stats.bytes} />
-        <Dot />
-        <StatInline value={stats.tip.toLocaleString("en-US")} label={copy.home.chainLine} labelFirst />
-      </p>
-
       <Section
         title={copy.home.pooled.title}
         meta={
@@ -90,19 +74,6 @@ export default async function HomePage() {
       </CollapsibleSection>
     </>
   );
-}
-
-function StatInline({ value, label, accent = false, labelFirst = false }: { value: number | string; label: string; accent?: boolean; labelFirst?: boolean }) {
-  const number = <span className={`text-[13px] font-semibold tracking-normal ${accent ? "text-copper" : "text-ink"}`}>{typeof value === "number" ? value.toLocaleString("en-US") : value}</span>;
-  return labelFirst ? (
-    <span className="whitespace-nowrap">{label} {number}</span>
-  ) : (
-    <span className="whitespace-nowrap">{number} {label}</span>
-  );
-}
-
-function Dot() {
-  return <span className="text-line">·</span>;
 }
 
 function Section({

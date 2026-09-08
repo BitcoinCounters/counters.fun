@@ -43,8 +43,7 @@ export const copy = {
   about: { label: "about" },
   search: { placeholder: "search counters", none: "no on-chain counter matches" },
   prices: {
-    xcpDispenser: "XCP: the cheapest open dispenser on Counterparty that can still dispense, in BTC at the local mempool backend's BTC/USD. On-chain, from this node.",
-    xcpDex: "XCP: the best open sell order on Counterparty's DEX, in BTC at the local BTC/USD.",
+    source: (source: string) => (source === "coingecko" ? "CoinGecko, refreshed every minute" : "local mempool backend"),
   },
 
   home: {
