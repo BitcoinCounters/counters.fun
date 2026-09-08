@@ -42,7 +42,7 @@ export function PriceTicker({ placement = "header" }: { placement?: "header" | "
       <Pill icon="₿" tone="text-gold" value={`$${usd(prices.btc.usd, 0)}`} change={prices.btc.change30d} title={copy.prices.btc(pct(prices.btc.change24h), prices.btc.source)} />
       {prices.xcp && (
         <Pill
-          icon="X"
+          icon="XCP"
           tone="text-copper"
           value={`$${usd(prices.xcp.usd, 2)}`}
           change={prices.xcp.change30d}
