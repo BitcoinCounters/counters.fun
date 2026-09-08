@@ -179,32 +179,24 @@ describe("the Esplora fallback Horizon depends on", () => {
     (globalThis as Record<string, unknown>).window = {};
   });
 
-  it("treats an already-relayed transaction as success, naming it from its own bytes", async () => {
-    const { broadcastViaEsplora } = await import("../apps/web/src/lib/wallet/broadcast");
+  it("relays through the local node, treating an already-known transaction as success", async () => {
+    const { broadcastViaNode, txidOf } = await import("../apps/web/src/lib/wallet/broadcast");
+    // MEMENOME's own deploy — long confirmed. Bitcoin Core answers
+    // "Transaction outputs already in utxo set" and the txid is recomputed.
+    const CP = process.env.COUNTERPARTY_API_BASE ?? "http://127.0.0.1:4000";
+    const txid = "5dfbc6ffaae2939838c411edcb99952c768f9375a3fa090f42ebe6e";
+    const info = await (await fetch(`${CP}/v2/assets/MEMENOME/fairminters`)).json();
+    const hash: string = info.result[0].tx_hash;
+    const raw = (await (await fetch(`${CP}/v2/bitcoin/transactions/${hash}?result_format=hex`)).json()).result;
+    expect(txidOf(raw)).toBe(hash);
+    await expect(broadcastViaNode(raw, `${CP}/v2`)).resolves.toBe(hash);
+    void txid;
+  });
 
-    // MEMENOME's reveal — long confirmed, so Core answers
-    // `-27: Transaction outputs already in utxo set`, a reply that contains no
-    // txid at all. Scraping the response would fail here; computing it does not.
-    const txid = "5dfbc6ffaae2939838c411edcb99952c768f9375a3fa090f42ebe6ecfef4d464";
-    const raw = (await (await fetch(`https://mempool.space/api/tx/${txid}/hex`)).text()).trim();
-
-    await expect(broadcastViaEsplora(raw)).resolves.toBe(txid);
-  }, 60_000);
-
-  it("surfaces a real rejection rather than inventing a txid", async () => {
-    const { broadcastViaEsplora } = await import("../apps/web/src/lib/wallet/broadcast");
-    await expect(broadcastViaEsplora("deadbeef")).rejects.toThrow(/could not relay/i);
-  }, 60_000);
-});
-
-/* -------------------------------------------------------------------- */
-/* XCP                                                                  */
-/* -------------------------------------------------------------------- */
-
-describe("XCP Wallet", () => {
-  beforeEach(() => {
-    vi.resetModules();
-    (globalThis as Record<string, unknown>).window = {};
+  it("refuses bytes that are not a transaction, with the node's reason", async () => {
+    const { broadcastViaNode } = await import("../apps/web/src/lib/wallet/broadcast");
+    const CP = process.env.COUNTERPARTY_API_BASE ?? "http://127.0.0.1:4000";
+    await expect(broadcastViaNode("deadbeef", `${CP}/v2`)).rejects.toThrow(/could not relay/i);
   });
 
   it("declares the capabilities the mint flow branches on", async () => {

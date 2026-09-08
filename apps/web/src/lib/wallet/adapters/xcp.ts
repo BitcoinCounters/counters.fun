@@ -12,6 +12,7 @@
  * re-keyed before signing. Without it a commit is simply rejected.
  */
 
+import { broadcastTransaction } from "@/lib/wallet/broadcast";
 import { XcpWallet, detectProvider, getProvider } from "@/lib/wallet/sdk";
 import {
   NotConnectedError,
@@ -119,6 +120,13 @@ export const xcpAdapter: WalletAdapter = {
       const wallet = await sdk();
       return await wallet.broadcastTransaction(rawHex);
     } catch (cause) {
+      // The wallet relays through its own backend, whose fee policy is not
+      // ours. A sub-1 sat/vB transaction it refuses is still fine for this
+      // site's node; anything else is a real failure.
+      const message = cause instanceof Error ? cause.message : String(cause);
+      if (/min relay fee|mempool min fee|fee.*too low|insufficient fee/i.test(message)) {
+        return broadcastTransaction(rawHex);
+      }
       throw translate(cause);
     }
   },
