@@ -3,6 +3,7 @@ import { getHome, getStats } from "@/lib/api";
 import { MintingCard, PooledCard, UnpooledCard, totalDepth } from "@/components/counter-card";
 import { fmtCompact, fmtSize } from "@/lib/format";
 import { PriceTicker } from "@/components/price-ticker";
+import { SearchBox } from "@/components/search-box";
 import { copy } from "@content/copy";
 
 export const revalidate = 30;
@@ -35,6 +36,10 @@ export default async function HomePage() {
         <span className="ml-auto">
           <PriceTicker placement="row" />
         </span>
+      </div>
+
+      <div className="border-b border-line py-3">
+        <SearchBox wide />
       </div>
 
       <Section
