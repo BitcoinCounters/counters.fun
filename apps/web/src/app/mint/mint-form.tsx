@@ -46,7 +46,7 @@ export function MintForm() {
   const [supply, setSupply] = useState("1");
   const [divisible, setDivisible] = useState(false);
   const [lockQuantity, setLockQuantity] = useState(true);
-  const [envelope, setEnvelope] = useState<EnvelopeStyle>("counterparty/ord");
+  const [envelope, setEnvelope] = useState<EnvelopeStyle>("counterparty");
   const [satPerVbyte, setSatPerVbyte] = useState("2");
   const [suggestedRate, setSuggestedRate] = useState<number | null>(null);
 
@@ -255,16 +255,16 @@ export function MintForm() {
       <Well label={copy.mint.envelope.label}>
         <div className="flex flex-col gap-2">
           <Choice
-            label={copy.mint.envelope.ord}
-            hint={copy.mint.envelope.ordHint}
-            active={envelope === "counterparty/ord"}
-            onClick={() => setEnvelope("counterparty/ord")}
-          />
-          <Choice
             label={copy.mint.envelope.native}
             hint={copy.mint.envelope.nativeHint}
             active={envelope === "counterparty"}
             onClick={() => setEnvelope("counterparty")}
+          />
+          <Choice
+            label={copy.mint.envelope.ord}
+            hint={copy.mint.envelope.ordHint}
+            active={envelope === "counterparty/ord"}
+            onClick={() => setEnvelope("counterparty/ord")}
           />
         </div>
 

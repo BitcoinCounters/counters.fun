@@ -45,3 +45,44 @@ const TOKENS: Record<string, string> = {
 export function fill(text: string): string {
   return text.replace(/\{\{(\w+)\}\}/g, (whole, name: string) => TOKENS[name] ?? whole);
 }
+
+export type Segment = { text: string; bold: boolean; href?: string };
+
+/**
+ * Split a copy string into segments, honouring `**bold**` markers and
+ * `[text](url)` links — the two can nest, as in `[**word**](https://…)`.
+ *
+ * Tokens are substituted first. An unpaired `**` or a malformed link is left
+ * visible, same philosophy as an unknown token. Renderers map `bold: true`
+ * segments to `<strong>` and `href` segments to `<a>`.
+ */
+export function fillSegments(text: string): Segment[] {
+  const filled = fill(text);
+  const segments: Segment[] = [];
+  let last = 0;
+  for (const match of filled.matchAll(/\[([^\]]+)\]\(([^)]+)\)/g)) {
+    if (match.index > last) segments.push(...boldSegments(filled.slice(last, match.index)));
+    for (const segment of boldSegments(match[1])) segments.push({ ...segment, href: match[2] });
+    last = match.index + match[0].length;
+  }
+  if (last < filled.length) segments.push(...boldSegments(filled.slice(last)));
+  return segments;
+}
+
+function boldSegments(text: string): Segment[] {
+  return text
+    .split(/\*\*([^*]+)\*\*/g)
+    .map((part, i) => ({ text: part, bold: i % 2 === 1 }))
+    .filter((segment) => segment.text.length > 0);
+}
+
+/**
+ * Split a copy string into paragraphs on blank lines (`\n\n`), each a list of
+ * bold-aware segments. Renderers map each paragraph to its own `<p>`.
+ */
+export function fillParagraphs(text: string): Segment[][] {
+  return text
+    .split(/\n{2,}/)
+    .map((paragraph) => fillSegments(paragraph.trim()))
+    .filter((segments) => segments.length > 0);
+}
