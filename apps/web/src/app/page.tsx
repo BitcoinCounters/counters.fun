@@ -25,13 +25,15 @@ export default async function HomePage() {
       {/* One line: the prices, what is on Bitcoin, and the block. The
           introduction lives behind "about" in the header. */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line py-4 font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
-        <PriceTicker placement="row" />
         <span className="whitespace-nowrap">
           <span className="text-[13px] font-semibold tracking-normal text-ink">{fmtSize(stats.bytes_on_chain)}</span> {copy.home.stats.bytes}
         </span>
         <span className="text-line">·</span>
         <span className="whitespace-nowrap">
           {copy.home.chainLine} <span className="text-[13px] font-semibold tracking-normal text-ink">{stats.tip.toLocaleString("en-US")}</span>
+        </span>
+        <span className="ml-auto">
+          <PriceTicker placement="row" />
         </span>
       </div>
 
