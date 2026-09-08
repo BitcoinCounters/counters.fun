@@ -1,7 +1,7 @@
 import { docsHtml } from "@content/docs";
 
 export const metadata = {
-  title: "How it works — counters.fun",
+  title: "counters.fun",
   description: "What a counter is, how it gets a pool, and why nothing here is hosted.",
 };
 

@@ -3,7 +3,7 @@ import { copy } from "@content/copy";
 import { fill } from "@content/fill";
 
 export const metadata = {
-  title: "Mint a counter — counters.fun",
+  title: "counters.fun",
   description: "Put a file in Bitcoin's witness data and issue the asset that owns it.",
 };
 

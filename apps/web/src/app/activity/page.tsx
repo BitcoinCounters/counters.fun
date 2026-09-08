@@ -7,7 +7,7 @@ import { copy } from "@content/copy";
 export const revalidate = 30;
 
 export const metadata = {
-  title: "Activity — counters.fun",
+  title: "counters.fun",
   description: "Swaps against counter pools, newest first.",
 };
 
