@@ -322,6 +322,33 @@ export const copy = {
     },
   },
 
+  swap: {
+    label: "swap",
+    buy: "buy",
+    sell: "sell",
+    youPay: "you pay",
+    youReceive: "you receive (est.)",
+    minimum: (amount: string, asset: string) => `at least ${amount} ${asset}, or the order expires`,
+    price: "effective price",
+    impact: "price impact",
+    poolFee: "pool fee",
+    slippage: "slippage",
+    expiry: "expires after",
+    blocks: "blocks",
+    expiryHint:
+      "A swap is an order. The pool fills it at once, up to your limit; anything it cannot fill at that price waits on the order book for this many blocks, then comes back to you.",
+    remainder: (amount: string, asset: string) =>
+      `${amount} ${asset} of this cannot be filled by the pool at whole-unit precision and would wait on the book.`,
+    highImpact: (pct: string) => `${pct}% price impact — this trade moves the pool noticeably.`,
+    noPool: "No pool to swap against.",
+    quoting: "quoting…",
+    cta: "swap",
+    confirm: (give: string, giveAsset: string, min: string, getAsset: string) =>
+      `Give ${give} ${giveAsset} for at least ${min} ${getAsset}?`,
+    receipt: "swap sent",
+    receiptBody: "It fills when the transaction confirms. If the pool has moved past your limit by then, the unfilled part waits on the book until expiry and is returned.",
+  },
+
   fee: {
     label: "fee rate",
     presets: { fast: "fast", normal: "normal", economy: "economy" } as Record<string, string>,

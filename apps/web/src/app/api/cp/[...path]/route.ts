@@ -49,6 +49,9 @@ const COMPOSE_ALLOWED = new Set([
   "fairminter",
   "pooldeposit",
   "poolwithdraw",
+  // A swap: an order the AMM pool fills at its marginal price, the book
+  // taking the rest. Expiry is the safety net for what neither fills.
+  "order",
   // Only used to send LP tokens to the unspendable address; a plain send is
   // still a compose, and the wallet still sees exactly what it signs.
   "send",
