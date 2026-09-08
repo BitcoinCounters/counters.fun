@@ -17,7 +17,7 @@ interface Hit {
  * first hit; arrows move. Results come from the API worker's /search, which
  * applies the same on-chain rule as every listing.
  */
-export function SearchBox() {
+export function SearchBox({ wide = false }: { wide?: boolean }) {
   const router = useRouter();
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<Hit[]>([]);
@@ -76,8 +76,8 @@ export function SearchBox() {
   };
 
   return (
-    <div ref={box} className="relative hidden nav:block">
-      <div className="flex items-center gap-2 rounded-lg border border-line bg-card px-2.5 py-1.5 focus-within:border-copper">
+    <div ref={box} className={wide ? "relative block" : "relative hidden nav:block"}>
+      <div className={`flex items-center gap-2 rounded-lg border border-line bg-card focus-within:border-copper ${wide ? "px-3 py-2" : "px-2.5 py-1.5"}`}>
         <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden className="text-faint">
           <circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
           <path d="M10.5 10.5L14 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
@@ -94,12 +94,12 @@ export function SearchBox() {
             if (e.key === "Escape") { setOpen(false); input.current?.blur(); }
           }}
           placeholder={copy.search.placeholder}
-          className="w-44 bg-transparent font-mono text-[12px] text-ink outline-none placeholder:text-faint"
+          className={`${wide ? "flex-1 text-[13px]" : "w-44 text-[12px]"} bg-transparent font-mono text-ink outline-none placeholder:text-faint`}
         />
         <kbd className="rounded border border-line px-1 font-mono text-[9px] text-faint">⌘K</kbd>
       </div>
       {open && q.trim() && (
-        <div className="absolute left-0 top-full z-50 mt-2 w-[320px] overflow-hidden rounded-xl border border-line bg-card shadow-[0_20px_60px_rgba(0,0,0,0.5)]">
+        <div className={`absolute left-0 top-full z-50 mt-2 overflow-hidden rounded-xl border border-line bg-card shadow-[0_20px_60px_rgba(0,0,0,0.5)] ${wide ? "w-full max-w-[560px]" : "w-[320px]"}`}>
           {hits.length === 0 ? (
             <p className="px-3 py-2.5 font-mono text-[11px] text-faint">{copy.search.none}</p>
           ) : (
