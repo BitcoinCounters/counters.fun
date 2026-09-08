@@ -16,7 +16,7 @@ export function HomeLede() {
   const expandable = paragraphs.length > 1;
 
   return (
-    <div className="mb-9 max-w-[58ch] space-y-4 text-base text-dim">
+    <div className="max-w-[58ch] space-y-4 text-[15px] leading-relaxed text-dim">
       {shown.map((segments, p) => (
         <p key={p}>
           {segments.map((segment, i) => (

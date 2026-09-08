@@ -1,8 +1,6 @@
 import Link from "next/link";
 import { getHome, getStats } from "@/lib/api";
 import { MintingCard, PooledCard, UnpooledCard, totalDepth } from "@/components/counter-card";
-import { HomeLede } from "@/components/home-lede";
-import { Meter } from "@/components/meter";
 import { fmtCompact, fmtSize } from "@/lib/format";
 import { copy } from "@content/copy";
 
@@ -23,37 +21,21 @@ export default async function HomePage() {
 
   return (
     <>
-      <section className="border-b border-line py-14">
-        <p className="mb-4 font-mono text-xs uppercase tracking-[0.22em] text-copper">
-          {copy.home.eyebrow}
-        </p>
-        <h1 className="mb-2 max-w-[20ch] font-mono text-[clamp(26px,4.4vw,40px)] font-semibold leading-[1.12] tracking-[-0.01em]">
-          {copy.home.headline} <span className="text-dim">{copy.home.headlineDim}</span>
-        </h1>
-        <HomeLede />
-
-        <div className="flex flex-wrap items-end gap-9">
-          <Stat label={copy.home.stats.pooled} value={stats.pooled} accent />
-          <Stat label={copy.home.stats.minting} value={stats.minting} />
-          {/* The protocol's own count — every numbered counter, pointers included.
-              The listings below still show only the on-chain ones; that is a
-              display rule, not a different number of counters. */}
-          <Stat label={copy.home.stats.counters} value={stats.counters_total} />
-          <div>
-            <div className="font-mono text-[26px] font-semibold text-ink">
-              {fmtSize(stats.bytes_on_chain)}
-            </div>
-            <div className="mt-1.5 font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
-              {copy.home.stats.bytes}
-            </div>
-          </div>
-        </div>
-
-        <p className="mt-6 font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
-          {copy.home.chainLine}{" "}
-          <span className="text-dim">{stats.tip.toLocaleString("en-US")}</span>
-        </p>
-      </section>
+      {/* One line. The introduction lives behind "about" in the header; what
+          the home page states up front is only what is true right now. The
+          counters figure is the protocol's own count, pointers included —
+          the listings below show the on-chain ones, which is a display rule. */}
+      <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1 border-b border-line py-5 font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
+        <StatInline value={stats.pooled} label={copy.home.stats.pooled} accent />
+        <Dot />
+        <StatInline value={stats.minting} label={copy.home.stats.minting} />
+        <Dot />
+        <StatInline value={stats.counters_total} label={copy.home.stats.counters} />
+        <Dot />
+        <StatInline value={fmtSize(stats.bytes_on_chain)} label={copy.home.stats.bytes} />
+        <Dot />
+        <StatInline value={stats.tip.toLocaleString("en-US")} label={copy.home.chainLine} labelFirst />
+      </p>
 
       <Section
         title={copy.home.pooled.title}
@@ -110,19 +92,17 @@ export default async function HomePage() {
   );
 }
 
-function Stat({ label, value, accent = false }: { label: string; value: number; accent?: boolean }) {
-  return (
-    <div>
-      <Meter value={value} size={26} />
-      <div
-        className={`mt-1.5 font-mono text-[11px] uppercase tracking-[0.16em] ${
-          accent ? "text-copper" : "text-faint"
-        }`}
-      >
-        {label}
-      </div>
-    </div>
+function StatInline({ value, label, accent = false, labelFirst = false }: { value: number | string; label: string; accent?: boolean; labelFirst?: boolean }) {
+  const number = <span className={`text-[13px] font-semibold tracking-normal ${accent ? "text-copper" : "text-ink"}`}>{typeof value === "number" ? value.toLocaleString("en-US") : value}</span>;
+  return labelFirst ? (
+    <span className="whitespace-nowrap">{label} {number}</span>
+  ) : (
+    <span className="whitespace-nowrap">{number} {label}</span>
   );
+}
+
+function Dot() {
+  return <span className="text-line">·</span>;
 }
 
 function Section({

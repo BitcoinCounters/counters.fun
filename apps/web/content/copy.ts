@@ -40,6 +40,8 @@ export const copy = {
     { href: "https://bitcoincounters.com", label: "BitcoinCounters" },
   ],
 
+  about: { label: "about" },
+
   home: {
     eyebrow: "trade counters",
     /** The second half renders in a dimmer colour. */
@@ -51,7 +53,7 @@ export const copy = {
       pooled: "pooled",
       minting: "minting",
       counters: "counters",
-      bytes: "committed to bitcoin",
+      bytes: "on bitcoin",
     },
     /** The line under the stats — the label before the block height. */
     chainLine: "block",
