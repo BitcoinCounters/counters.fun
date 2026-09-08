@@ -43,7 +43,10 @@ export const copy = {
   about: { label: "about" },
   search: { placeholder: "search counters", none: "no on-chain counter matches" },
   prices: {
-    source: (source: string) => (source === "coingecko" ? "CoinGecko, refreshed every minute" : "local mempool backend"),
+    btc: (change24h: string, source: string) =>
+      `BTC/USD from ${source === "coingecko" ? "CoinGecko" : "the local mempool backend"}. Badge is the 30-day change; 24h: ${change24h}.`,
+    xcp: (change24h: string, trades: number) =>
+      `XCP as it actually trades on-chain: the volume-weighted price of the last day's dispenses on Counterparty (${trades} trades), in BTC at today's BTC/USD. Badge is the 30-day change; 24h: ${change24h}. Exchanges quote XCP lower than it costs to obtain on Bitcoin.`,
   },
 
   home: {

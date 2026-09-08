@@ -4,15 +4,14 @@ import { useEffect, useState } from "react";
 import { copy } from "@content/copy";
 
 interface Prices {
-  btc: { usd: number; change24h: number | null };
-  xcp: { btc: number; usd: number; sats: number; change24h: number | null } | null;
-  source: "coingecko" | "mempool";
+  btc: { usd: number; change24h: number | null; change30d: number | null; source: string };
+  xcp: { usd: number; btc: number; sats: number; change24h: number | null; change30d: number | null; trades24h: number } | null;
 }
 
 /**
- * BTC and XCP in the header, from /api/prices (CoinGecko, server-side,
- * cached a minute; the local mempool backend for BTC if that fails).
- * Absent, not fake, when nothing answers.
+ * BTC and XCP in the header, as xcp.fun shows them: an exchange quote for
+ * BTC, the on-chain dispense price for XCP, both with a 30-day change.
+ * Refreshed every minute; absent, not fake, when nothing answers.
  */
 export function PriceTicker() {
   const [prices, setPrices] = useState<Prices | null>(null);
@@ -34,30 +33,30 @@ export function PriceTicker() {
 
   if (!prices) return null;
   const usd = (v: number, digits: number) => v.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  const pct = (v: number | null) => (v === null ? "—" : `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`);
   return (
     <div className="hidden items-center gap-2 nav:flex">
-      <Pill icon="₿" tone="text-gold" label="BTC" value={`$${usd(prices.btc.usd, 0)}`} change={prices.btc.change24h} />
+      <Pill icon="₿" tone="text-gold" value={`$${usd(prices.btc.usd, 0)}`} change={prices.btc.change30d} title={copy.prices.btc(pct(prices.btc.change24h), prices.btc.source)} />
       {prices.xcp && (
         <Pill
           icon="X"
           tone="text-copper"
-          label="XCP"
           value={`$${usd(prices.xcp.usd, 2)}`}
-          change={prices.xcp.change24h}
+          change={prices.xcp.change30d}
           sub={`${prices.xcp.sats.toLocaleString("en-US")} sat`}
-          title={copy.prices.source(prices.source)}
+          title={copy.prices.xcp(pct(prices.xcp.change24h), prices.xcp.trades24h)}
         />
       )}
     </div>
   );
 }
 
-function Pill({ icon, tone, label, value, change, sub, title }: { icon: string; tone: string; label: string; value: string; change?: number | null; sub?: string; title?: string }) {
+function Pill({ icon, tone, value, change, sub, title }: { icon: string; tone: string; value: string; change: number | null; sub?: string; title: string }) {
   return (
-    <span title={title ?? label} className="flex items-center gap-1.5 rounded-full border border-line bg-card px-2.5 py-1 font-mono text-[11px] text-ink">
+    <span title={title} className="flex items-center gap-1.5 rounded-full border border-line bg-card px-2.5 py-1 font-mono text-[11px] text-ink">
       <span className={`font-semibold ${tone}`}>{icon}</span>
       <span>{value}</span>
-      {typeof change === "number" && (
+      {change !== null && (
         <span className={change >= 0 ? "text-patina" : "text-bad"}>
           {change >= 0 ? "+" : ""}
           {change.toFixed(1)}%
