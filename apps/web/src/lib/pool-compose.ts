@@ -157,10 +157,20 @@ export function composeLpLock(address: string, lpAsset: string, quantity: bigint
   });
 }
 
-/** Reduce a quantity by a slippage percentage, for a `min_*` bound. */
+/**
+ * Reduce a quantity by a slippage percentage, for a `min_*` bound.
+ *
+ * Never returns 0 for a positive quantity. Integer division floors, so 1% off
+ * a single indivisible unit is `(1 * 9900) / 10000` = 0 — and a `min_*` of 0
+ * is not a loose tolerance, it is an order that accepts ANY fill, including
+ * nothing at all. One raw unit is the smallest bound that still means
+ * something, and rounding up to it costs at most that one unit.
+ */
 export function withSlippage(quantity: bigint, percent: number): bigint {
+  if (quantity <= 0n) return 0n;
   const bps = BigInt(Math.round(percent * 100));
-  return (quantity * (10_000n - bps)) / 10_000n;
+  const reduced = (quantity * (10_000n - bps)) / 10_000n;
+  return reduced > 0n ? reduced : 1n;
 }
 
 /** Raw quantities in the pool's own decimals, for pre-filling a field. */
