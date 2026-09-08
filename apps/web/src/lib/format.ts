@@ -18,7 +18,7 @@ import { big } from "@counters/core/numeric";
 export function fmtSize(bytes: number): string {
   if (bytes < 1000) return `${bytes} B`;
   if (bytes < 1_000_000) return `${(bytes / 1000).toFixed(1)} KB`;
-  return `${(bytes / 1_000_000).toFixed(1)} MB`;
+  return `${(bytes / 1_000_000).toFixed(2)} MB`;
 }
 
 /**
