@@ -19,7 +19,7 @@ import {
 } from "../packages/counters/src/pool";
 import { big } from "../packages/counters/src/numeric";
 
-const CP = process.env.COUNTERPARTY_API_BASE ?? "https://api.counterparty.io:4000";
+const CP = process.env.COUNTERPARTY_API_BASE ?? "http://127.0.0.1:4000";
 const TOKEN = "MEMENOME";
 
 async function get<T>(path: string): Promise<T> {

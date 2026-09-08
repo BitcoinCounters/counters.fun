@@ -37,7 +37,7 @@ import {
   type WalletAccount,
   type WalletAdapter,
 } from "@/lib/wallet/adapter";
-import { broadcastViaEsplora } from "@/lib/wallet/broadcast";
+import { broadcastTransaction } from "@/lib/wallet/broadcast";
 
 interface HorizonProvider {
   request(method: string, params?: unknown): Promise<{ result: unknown }>;
@@ -185,7 +185,7 @@ export const horizonAdapter: WalletAdapter = {
   },
 
   // No relay of its own — see lib/wallet/broadcast.ts.
-  broadcast: (rawHex) => broadcastViaEsplora(rawHex),
+  broadcast: (rawHex) => broadcastTransaction(rawHex),
 
   capabilities: {
     broadcasts: false,

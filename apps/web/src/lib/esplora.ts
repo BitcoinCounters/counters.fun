@@ -239,6 +239,26 @@ export async function fetchAddressStats(address: string): Promise<AddressStats> 
  * because it gets multiplied into a price.
  */
 export async function fetchHalfHourFeeRate(): Promise<number | null> {
+  const own = await fetchNodeFeeRate(3);
+  if (own !== null) return own;
   const { data, host } = await esplora((h) => h.feePath);
   return host.halfHour(data);
+}
+
+/**
+ * Our own node's `estimatesmartfee`, in sat/vB, or null. Bitcoin Core answers
+ * in sat/kB (and -1 with nothing to estimate from, e.g. a fresh node), so the
+ * value is scaled and floored at the 1 sat/vB relay minimum.
+ */
+export async function fetchNodeFeeRate(confTarget = 3): Promise<number | null> {
+  try {
+    const res = await fetch(`/api/cp/bitcoin/estimatesmartfee?conf_target=${confTarget}`);
+    if (!res.ok) return null;
+    const body = (await res.json()) as { result?: unknown };
+    const perKb = typeof body.result === "number" ? body.result : Number.NaN;
+    if (!Number.isFinite(perKb) || perKb <= 0) return null;
+    return Math.max(1, Math.round((perKb / 1000) * 10) / 10);
+  } catch {
+    return null;
+  }
 }

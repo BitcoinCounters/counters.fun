@@ -131,6 +131,12 @@ never fires it, so a local index otherwise freezes at whatever it last held.
   http://localhost:3010 — the site
   http://localhost:8787 — the API
 
+The web app's Counterparty proxy (`app/api/cp`) targets the node on this
+machine, `http://127.0.0.1:4000/v2`, unless `COUNTERPARTY_API_BASE` says
+otherwise — composes, quotes, fee estimates and Horizon's transaction relay
+all go there, with public Esplora only as the relay and fee fallback. The
+worker's upstreams are set separately in `apps/api/.dev.vars`.
+
 **Use `localhost`, not `127.0.0.1`.** Next's dev server treats them as
 different origins and blocks its own chunks across them, so the page renders
 server-side and silently never hydrates. `allowedDevOrigins` in
