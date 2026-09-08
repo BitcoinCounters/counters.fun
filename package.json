@@ -1,0 +1,28 @@
+{
+  "name": "counters-fun-monorepo",
+  "version": "0.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev --workspace apps/web -- --port 3010",
+    "dev:api": "npm run dev --workspace apps/api",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "npm run test && npm run check --workspace apps/web && npm run check --workspace apps/api",
+    "smoke": "node scripts/smoke.mjs",
+    "deploy:web": "npm run deploy --workspace apps/web",
+    "deploy:api": "npm run deploy --workspace apps/api && npm run smoke",
+    "migrate:api:local": "npm run migrate:local --workspace apps/api",
+    "migrate:api:remote": "npm run migrate:remote --workspace apps/api",
+    "start:web": "npm run start --workspace apps/web -- --port 3010",
+    "build:web": "npm run build --workspace apps/web",
+    "local": "node scripts/local.mjs",
+    "sync": "curl -s 'http://127.0.0.1:8787/cdn-cgi/handler/scheduled' && echo ' synced'"
+  },
+  "devDependencies": {
+    "vitest": "4.1.11"
+  }
+}

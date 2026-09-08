@@ -1,0 +1,44 @@
+# counters.fun API — the counters × pools join, and the on-chain content
+# proxy.
+#
+# It does not replace either upstream. Counterparty still answers every
+# balance, quote and compose the browser asks for, and the counters server
+# remains the protocol's indexer of record. This worker exists because the one
+# question the site is built on — which counters have an XCP pool — spans both
+# of them and neither can answer it.
+name = "counters-api"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+workers_dev = true
+# routes = [{ pattern = "api.counters.fun", custom_domain = true }]
+
+[observability]
+enabled = true
+
+[vars]
+COUNTERPARTY_API_BASE = "https://api.counterparty.io:4000"
+COUNTERS_API_BASE = "https://www.bitcoincounters.com"
+# The only origin allowed to frame a counter's on-chain content. Set to the
+# real origin before deploying; 'self' is a development default that would
+# silently stop the web app from rendering HTML counters in production.
+WEB_ORIGIN = "https://counters.fun"
+
+# The counters index grows by a handful a day and blocks land every ten
+# minutes, so five minutes is well inside "current" without paying to poll a
+# chain that has not moved.
+[triggers]
+crons = ["*/5 * * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "counters-db"
+database_id = "00000000-0000-0000-0000-000000000000" # placeholder; replace with the id from `wrangler d1 create counters-db`
+migrations_dir = "migrations"
+
+# Counter bytes are immutable and content-addressed by sha256, so this bucket
+# is write-once per distinct file and never needs invalidation.
+[[r2_buckets]]
+binding = "CONTENT"
+bucket_name = "counters-content"

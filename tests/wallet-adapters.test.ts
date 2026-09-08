@@ -1,0 +1,218 @@
+/**
+ * The two wallets, against the contract.
+ *
+ * Both are browser extensions, so nothing here can prove a real signature. What
+ * it can pin is the wire shape each adapter speaks — and that is precisely
+ * where a two-wallet integration breaks, silently, in a way you only discover
+ * after a user has approved a payment.
+ *
+ * The Horizon expectations are read from the shipped extension (v2.3.1,
+ * `horizon-provider.js`), not guessed: its house RPC takes `signPsbt({hex,
+ * signInputs, sighashTypes})` and returns `{hex}`, while its sats-connect layer
+ * takes `{psbt}` in base64. Sending the wrong one silently routes to the wrong
+ * dialect.
+ */
+
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { requiresTaproot, xOnly } from "../apps/web/src/lib/wallet/adapter";
+
+/* -------------------------------------------------------------------- */
+/* Shared contract                                                      */
+/* -------------------------------------------------------------------- */
+
+describe("the adapter contract", () => {
+  it("takes the x-only half of a compressed key, and leaves an x-only key alone", () => {
+    const compressed = "02" + "ab".repeat(32);
+    expect(xOnly(compressed)).toHaveLength(32);
+    expect(xOnly(compressed)[0]).toBe(0xab);
+
+    const already = "cd".repeat(32);
+    expect(xOnly(already)).toHaveLength(32);
+    expect(xOnly(already)[0]).toBe(0xcd);
+
+    // Odd-parity prefix is dropped the same way — the leaf carries x-only.
+    expect(xOnly("03" + "11".repeat(32))).toHaveLength(32);
+  });
+
+  it("refuses to mint from a non-taproot account", () => {
+    expect(requiresTaproot(null)).toMatch(/connect/i);
+    expect(
+      requiresTaproot({ address: "bc1q…", publicKey: "02".padEnd(66, "a"), addressType: "p2wpkh" }),
+    ).toMatch(/taproot/i);
+    expect(
+      requiresTaproot({ address: "1abc", publicKey: "02".padEnd(66, "a"), addressType: "p2pkh" }),
+    ).toMatch(/taproot/i);
+    expect(
+      requiresTaproot({ address: "bc1p…", publicKey: "02".padEnd(66, "a"), addressType: "p2tr" }),
+    ).toBeNull();
+  });
+});
+
+/* -------------------------------------------------------------------- */
+/* Horizon                                                              */
+/* -------------------------------------------------------------------- */
+
+describe("Horizon Wallet", () => {
+  let calls: { method: string; params: unknown }[];
+
+  beforeEach(() => {
+    calls = [];
+    vi.resetModules();
+    // The provider surface the real extension defines on window.
+    (globalThis as Record<string, unknown>).window = {
+      HorizonWalletProvider: {
+        request(method: string, params?: unknown) {
+          calls.push({ method, params });
+          if (method === "getAddresses") {
+            return Promise.resolve({
+              result: {
+                addresses: [
+                  { address: "bc1qpay", publicKey: "02" + "11".repeat(32), type: "p2wpkh" },
+                  { address: "bc1ptap", publicKey: "02" + "22".repeat(32), type: "p2tr" },
+                ],
+                network: "mainnet",
+              },
+            });
+          }
+          if (method === "signPsbt") {
+            return Promise.resolve({ result: { hex: "70736274ff00" } });
+          }
+          return Promise.resolve({ result: null });
+        },
+      },
+    };
+  });
+
+  it("is detected through the named getter and through WBIP-004 discovery", async () => {
+    const { horizonAdapter } = await import("../apps/web/src/lib/wallet/adapters/horizon");
+    expect(horizonAdapter.detect()).toBe(true);
+
+    (globalThis as Record<string, unknown>).window = {
+      btc_providers: [{ id: "HorizonWalletProvider", name: "Horizon Wallet" }],
+    };
+    expect(horizonAdapter.detect()).toBe(true);
+
+    (globalThis as Record<string, unknown>).window = {};
+    expect(horizonAdapter.detect()).toBe(false);
+  });
+
+  it("prefers the taproot account, which is the only one that can mint", async () => {
+    const { horizonAdapter } = await import("../apps/web/src/lib/wallet/adapters/horizon");
+    const account = await horizonAdapter.connect();
+
+    // Not simply the first address returned.
+    expect(account.address).toBe("bc1ptap");
+    expect(account.addressType).toBe("p2tr");
+    expect(requiresTaproot(account)).toBeNull();
+  });
+
+  it("signs through the house API — hex in, hex out, never the base64 dialect", async () => {
+    const { horizonAdapter } = await import("../apps/web/src/lib/wallet/adapters/horizon");
+    const signed = await horizonAdapter.signPsbt("70736274ff", { "bc1ptap": [0] });
+
+    expect(signed).toBe("70736274ff00");
+
+    const call = calls.find((c) => c.method === "signPsbt")!;
+    const params = call.params as Record<string, unknown>;
+    // `hex` routes to the house API; `psbt` would route to sats-connect and
+    // come back base64.
+    expect(params.hex).toBe("70736274ff");
+    expect(params.psbt).toBeUndefined();
+    expect(params.signInputs).toEqual({ "bc1ptap": [0] });
+    // Without 0x01 any non-taproot input throws "Sighash type is not allowed".
+    expect(params.sighashTypes).toEqual([0x00, 0x01]);
+  });
+
+  it("does not send the inscription context — that is an XCP Wallet concept", async () => {
+    const { horizonAdapter } = await import("../apps/web/src/lib/wallet/adapters/horizon");
+    await horizonAdapter.signPsbt(
+      "70736274ff",
+      { "bc1ptap": [0] },
+      { revealScript: "00", tapInternalKey: "11" },
+    );
+
+    const params = calls.find((c) => c.method === "signPsbt")!.params as Record<string, unknown>;
+    expect(params.inscription).toBeUndefined();
+  });
+
+  it("declares that it cannot broadcast, so the caller falls back", async () => {
+    const { horizonAdapter } = await import("../apps/web/src/lib/wallet/adapters/horizon");
+    expect(horizonAdapter.capabilities.broadcasts).toBe(false);
+    expect(horizonAdapter.capabilities.requiresInscriptionContext).toBe(false);
+    // Horizon signs ECDSA/BIP-137 and refuses BIP-322 outright, which is why
+    // connection here carries no ownership proof.
+    expect(horizonAdapter.capabilities.bip322).toBe(false);
+  });
+
+  it("tells a user cancellation apart from a wallet failure", async () => {
+    const { horizonAdapter } = await import("../apps/web/src/lib/wallet/adapters/horizon");
+
+    // The extension sends a plain-string `.error` only for a user rejection.
+    (globalThis as Record<string, unknown>).window = {
+      HorizonWalletProvider: {
+        request: () => Promise.reject({ error: "User rejected the request" }),
+      },
+    };
+    await expect(horizonAdapter.signPsbt("00", {})).rejects.toThrow(/rejected/i);
+    await expect(horizonAdapter.signPsbt("00", {})).rejects.toHaveProperty(
+      "name",
+      "UserRejectedError",
+    );
+
+    // An object `.error` is a real failure, not a cancellation.
+    (globalThis as Record<string, unknown>).window = {
+      HorizonWalletProvider: {
+        request: () => Promise.reject({ error: { code: -32603, message: "boom" } }),
+      },
+    };
+    await expect(horizonAdapter.signPsbt("00", {})).rejects.toHaveProperty("name", "Error");
+  });
+});
+
+/* -------------------------------------------------------------------- */
+/* Esplora relay                                                        */
+/* -------------------------------------------------------------------- */
+
+describe("the Esplora fallback Horizon depends on", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    (globalThis as Record<string, unknown>).window = {};
+  });
+
+  it("treats an already-relayed transaction as success, naming it from its own bytes", async () => {
+    const { broadcastViaEsplora } = await import("../apps/web/src/lib/wallet/broadcast");
+
+    // MEMENOME's reveal — long confirmed, so Core answers
+    // `-27: Transaction outputs already in utxo set`, a reply that contains no
+    // txid at all. Scraping the response would fail here; computing it does not.
+    const txid = "5dfbc6ffaae2939838c411edcb99952c768f9375a3fa090f42ebe6ecfef4d464";
+    const raw = (await (await fetch(`https://mempool.space/api/tx/${txid}/hex`)).text()).trim();
+
+    await expect(broadcastViaEsplora(raw)).resolves.toBe(txid);
+  }, 60_000);
+
+  it("surfaces a real rejection rather than inventing a txid", async () => {
+    const { broadcastViaEsplora } = await import("../apps/web/src/lib/wallet/broadcast");
+    await expect(broadcastViaEsplora("deadbeef")).rejects.toThrow(/could not relay/i);
+  }, 60_000);
+});
+
+/* -------------------------------------------------------------------- */
+/* XCP                                                                  */
+/* -------------------------------------------------------------------- */
+
+describe("XCP Wallet", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    (globalThis as Record<string, unknown>).window = {};
+  });
+
+  it("declares the capabilities the mint flow branches on", async () => {
+    const { xcpAdapter } = await import("../apps/web/src/lib/wallet/adapters/xcp");
+    // It relays its own transactions, and it will not sign a commit without
+    // the inscription context.
+    expect(xcpAdapter.capabilities.broadcasts).toBe(true);
+    expect(xcpAdapter.capabilities.requiresInscriptionContext).toBe(true);
+    expect(xcpAdapter.detect()).toBe(false);
+  });
+});

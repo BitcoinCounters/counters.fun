@@ -1,0 +1,28 @@
+{
+  "name": "@counters/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "imports": {
+    "#api/*": {
+      "types": "./src/*.ts",
+      "default": "./src/*.ts"
+    }
+  },
+  "scripts": {
+    "dev": "wrangler dev",
+    "check": "tsc --noEmit",
+    "deploy": "wrangler deploy",
+    "migrate:local": "wrangler d1 migrations apply counters-db --local",
+    "migrate:remote": "wrangler d1 migrations apply counters-db --remote"
+  },
+  "dependencies": {
+    "@counters/core": "*",
+    "hono": "^4.13.3"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20260822.1",
+    "typescript": "^5",
+    "wrangler": "4.125.0"
+  }
+}
