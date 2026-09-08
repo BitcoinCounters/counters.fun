@@ -274,3 +274,15 @@ export function orientWithdrawQuote(
     supply: big(quote.supply),
   };
 }
+
+/**
+ * Input needed to take `out` from a constant-product pool that charges
+ * `bps` on the input, as consensus does. Ceiling, so the forward formula
+ * reaches the target. Null when the pool cannot supply that much.
+ */
+export function inputForOutput(out: bigint, reserveIn: bigint, reserveOut: bigint, bps: number): bigint | null {
+  if (out <= 0n || out >= reserveOut) return null;
+  const effective = (out * reserveIn) / (reserveOut - out) + 1n;
+  const keep = BigInt(10_000 - bps);
+  return (effective * 10_000n + keep - 1n) / keep;
+}

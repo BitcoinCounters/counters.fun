@@ -328,6 +328,7 @@ export const copy = {
     sell: "sell",
     youPay: "you pay",
     youReceive: "you receive (est.)",
+    youReceiveExact: "you receive — pay amount computed",
     minimum: (amount: string, asset: string) => `at least ${amount} ${asset}, or the order expires`,
     price: "effective price",
     impact: "price impact",
@@ -340,6 +341,9 @@ export const copy = {
     remainder: (amount: string, asset: string) =>
       `${amount} ${asset} of this cannot be filled by the pool at whole-unit precision and would wait on the book.`,
     highImpact: (pct: string) => `${pct}% price impact — this trade moves the pool noticeably.`,
+    wholeUnits: (units: string, asset: string, cost: string) =>
+      `${asset} is indivisible: this buys ${units} whole ${asset} for ${cost} XCP. The pool takes only what those cost; the rest of the order comes back at expiry.`,
+    useExact: "pay exactly that",
     noPool: "No pool to swap against.",
     quoting: "quoting…",
     cta: "swap",
