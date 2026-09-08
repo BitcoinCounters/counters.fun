@@ -38,7 +38,7 @@ export default async function HomePage() {
         </span>
       </div>
 
-      <div className="border-b border-line pb-4 pt-2">
+      <div className="pb-2 pt-2">
         <SearchBox wide />
       </div>
 
