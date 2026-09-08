@@ -4,7 +4,7 @@
  * same record with the names the node would actually return for it.
  */
 import { describe, expect, it } from "vitest";
-import { orientDepositQuote, orientPool, orientWithdrawQuote, sortedPair, tokenIsA } from "../packages/counters/src/pool";
+import { orientDepositQuote, orientPool, orientWithdrawQuote, poolPrice, priceFromReserves, sortedPair, tokenIsA } from "../packages/counters/src/pool";
 
 describe("pair orientation", () => {
   it("sorts the way Core does", () => {
@@ -32,5 +32,18 @@ describe("pair orientation", () => {
 
     const w = { asset_a: "XCP", asset_b: "ZELD", supply: "14895226279172", quantity_a_estimate: 3, quantity_b_estimate: 334465 };
     expect(orientWithdrawQuote(w, "ZELD")).toEqual({ tokenOut: 334465n, xcpOut: 3n, supply: 14895226279172n });
+  });
+
+  it("prices an indivisible token by its whole units", () => {
+    // BONPARTY: 500 indivisible tokens against 100 XCP is 0.2 XCP each.
+    const bonparty = { asset_a: "BONPARTY", asset_b: "XCP", reserve_a: "500", reserve_b: "10000000000" };
+    expect(poolPrice(bonparty, false)).toBeCloseTo(0.2, 9);
+    expect(poolPrice(bonparty, true)).toBeCloseTo(20_000_000, 0);
+    // MEMENOME, divisible: raw/raw and whole/whole agree.
+    const memenome = { asset_a: "MEMENOME", asset_b: "XCP", reserve_a: "4981932395674824", reserve_b: "44688202231" };
+    expect(poolPrice(memenome, true)).toBeCloseTo(8.970053e-6, 12);
+    expect(priceFromReserves(4981932395674824n, 44688202231n, true)).toBeCloseTo(8.970053e-6, 12);
+    // And a pool where XCP sorts first still prices the token.
+    expect(poolPrice({ asset_a: "XCP", asset_b: "ZELD", reserve_a: "10000000000", reserve_b: "500" }, false)).toBeCloseTo(0.2, 9);
   });
 });

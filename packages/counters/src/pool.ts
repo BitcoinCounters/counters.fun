@@ -24,6 +24,9 @@ export interface Pool {
   /** Numeric asset minted as the LP token. */
   lp_asset: string;
   block_time: number;
+  /** Present on verbose records; the token side's `divisible` is what prices need. */
+  asset_a_info?: { divisible?: boolean } | null;
+  asset_b_info?: { divisible?: boolean } | null;
   reserve_a_normalized?: string;
   reserve_b_normalized?: string;
 }
@@ -138,16 +141,32 @@ export function withdrawalShares(
 }
 
 /**
- * Price of one whole unit of `asset_a` denominated in `asset_b`, as a double.
- * Display only — never round-trip a composed quantity through this.
+ * Price of one whole token in XCP, as a double. Display only — never
+ * round-trip a composed quantity through this.
+ *
+ * Reserves are raw units. XCP is always divisible (10^8 raw per XCP); the
+ * token may not be, and an indivisible token's raw unit *is* its whole
+ * unit. Dividing raw by raw is only right when both scale the same way —
+ * BONPARTY, 500 raw against 100 XCP, is 0.2 XCP a piece, not 20 million.
  */
-export function poolPrice(pool: Pick<Pool, "reserve_a" | "reserve_b">): number | null {
-  const a = big(pool.reserve_a);
-  const b = big(pool.reserve_b);
-  if (a <= 0n || b <= 0n) return null;
-  // Scale before dividing so small pools keep significant figures.
+export function poolPrice(
+  pool: Pick<Pool, "asset_a" | "asset_b" | "reserve_a" | "reserve_b">,
+  tokenDivisible = true,
+): number | null {
+  const token = tokenSide(pool);
+  if (!token) return null;
+  const tokenReserve = big(pool.asset_a === token ? pool.reserve_a : pool.reserve_b);
+  const xcpReserve = big(pool.asset_a === token ? pool.reserve_b : pool.reserve_a);
+  return priceFromReserves(tokenReserve, xcpReserve, tokenDivisible);
+}
+
+/** XCP per whole token from raw reserves. Scaled before dividing so small pools keep significant figures. */
+export function priceFromReserves(tokenReserve: bigint, xcpReserve: bigint, tokenDivisible: boolean): number | null {
+  if (tokenReserve <= 0n || xcpReserve <= 0n) return null;
   const SCALE = 1_000_000_000_000n;
-  return Number((b * SCALE) / a) / 1e12;
+  const tokenUnit = tokenDivisible ? 100_000_000n : 1n;
+  // (xcp / 1e8) / (token / tokenUnit) = xcp * tokenUnit / (token * 1e8)
+  return Number((xcpReserve * tokenUnit * SCALE) / (tokenReserve * 100_000_000n)) / 1e12;
 }
 
 /** Order a pair the way the API addresses it, with XCP as the quote side. */
