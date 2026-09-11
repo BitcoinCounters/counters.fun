@@ -54,6 +54,7 @@ export default async function CounterPage({ params }: { params: Promise<{ id: st
               contentType={counter.content_type}
               size={counter.size}
               isPointerLike={false}
+              stampMime={counter.stamp_mime}
               body={counter.body}
               interactive
             />

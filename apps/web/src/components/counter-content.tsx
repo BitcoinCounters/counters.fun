@@ -16,7 +16,7 @@
  */
 
 import { renderMode } from "@counters/core/counter";
-import { contentUrl } from "@/lib/constants";
+import { contentUrl, stampUrl } from "@/lib/constants";
 import { fmtSize, mimeTag, shortMime } from "@/lib/format";
 
 interface Props {
@@ -25,6 +25,9 @@ interface Props {
   contentType: string;
   size: number;
   isPointerLike: boolean;
+  /** Set when the description is a `STAMP:<base64>` payload the indexer
+   *  decoded to an image; the image's MIME, not the counter's. */
+  stampMime?: string | null;
   /** Inline body the indexer already returned, for small textual counters. */
   body?: string | null;
   /** Cards are a picture of the thing; a detail page is the thing. */
@@ -38,13 +41,41 @@ export function CounterContent({
   contentType,
   size,
   isPointerLike,
+  stampMime,
   body,
   interactive = false,
   className = "",
 }: Props) {
-  const mode = renderMode({ is_pointer_like: isPointerLike, size, content_type: contentType });
+  const mode = renderMode({
+    is_pointer_like: isPointerLike,
+    size,
+    content_type: contentType,
+    stamp_mime: stampMime ?? null,
+  });
 
   if (mode === "none") return <PointerRefusal body={body} className={className} />;
+
+  // A stamp: the counter's bytes are `STAMP:<base64>` text, and the file they
+  // encode is an image. Rendering the text verbatim is technically honest and
+  // practically useless — a wall of base64 where a picture belongs. The decode
+  // is the indexer's, served through this origin's proxy like every other
+  // byte here, so nothing about the premise changes: no server is supplying
+  // the picture, one is only unwrapping what the chain already holds.
+  if (mode === "stamp") {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element -- same reason as
+      // the `image` branch below: these bytes are already immutable and
+      // cached, and the Next pipeline would resize content whose exact pixels
+      // are the point.
+      <img
+        src={stampUrl(number)}
+        alt={`Counter #${number} — ${asset}`}
+        loading="lazy"
+        decoding="async"
+        className={`counter-image ${className}`}
+      />
+    );
+  }
 
   if (mode === "image") {
     return (

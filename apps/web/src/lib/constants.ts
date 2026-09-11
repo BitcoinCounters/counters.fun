@@ -29,6 +29,12 @@ export const BURN_ADDRESS = "1CounterpartyXXXXXXXXXXXXXXXUWLpVr";
  *  in next.config.ts, so an HTML counter can be framed and sandboxed. */
 export const contentUrl = (number: number) => `/content/${number}`;
 export const previewUrl = (number: number) => `/preview/${number}`;
+/**
+ * A stamp counter's decoded image. Still the same premise as `contentUrl` —
+ * these bytes are base64 that came out of a Bitcoin block, decoded by the
+ * protocol's own indexer. No server supplies the picture; one only unwraps it.
+ */
+export const stampUrl = (number: number) => `/stamp/${number}`;
 
 /** `amm_pools` (Core v11.1.0) — pools cannot exist before this block. */
 export const AMM_POOLS_ACTIVATION_BLOCK = 952_500;
