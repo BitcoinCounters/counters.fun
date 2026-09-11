@@ -99,8 +99,11 @@ export function undisplayableReason(
  * viewer with a toolbar. Neither is the file. Textual formats are shown as
  * text, and documents get an honest placeholder on a card and a real viewer
  * on a page.
+ *
+ * `stamp` is the one mode whose bytes are not the bytes on chain. See
+ * {@link renderMode}.
  */
-export type RenderMode = "image" | "sandbox" | "text" | "document" | "none";
+export type RenderMode = "image" | "stamp" | "sandbox" | "text" | "document" | "none";
 
 const IMAGE_TYPES = new Set([
   "image/png",
@@ -124,8 +127,24 @@ const TEXT_TYPES = new Set([
   "text/xml",
 ]);
 
-export function renderMode(counter: Pick<Counter, "is_pointer_like" | "size" | "content_type">): RenderMode {
+export function renderMode(
+  counter: Pick<Counter, "is_pointer_like" | "size" | "content_type" | "stamp_mime">,
+): RenderMode {
   if (!isOnChain(counter)) return "none";
+
+  // A stamp's description is `STAMP:<base64>` — genuinely on chain, and
+  // genuinely `text/plain`, but the file it encodes is an image. Shown as the
+  // base64 it literally is, the counter reads as a wall of noise; 13 of the
+  // 189 counters indexed today are in this shape.
+  //
+  // `stamp_mime` is non-null only when the indexer's own decode succeeded, so
+  // trusting it here inherits its strictness for free — a damaged payload
+  // (#54 MAGICEGG's stray space, #59 XCPFTW's stray prefix) leaves the field
+  // null and falls back to text, which is what the reference explorer does.
+  // Nothing in this file decodes base64; that would be a second, divergent
+  // implementation of a rule the indexer already owns.
+  if (counter.stamp_mime) return "stamp";
+
   const mime = (counter.content_type || "").split(";")[0]!.trim().toLowerCase();
 
   if (IMAGE_TYPES.has(mime)) return "image";

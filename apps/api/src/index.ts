@@ -30,7 +30,7 @@ app.get("/", (c) =>
     name: "counters.fun",
     what: "counters with XCP liquidity pools",
     rule: "only counters whose file is on Bitcoin are served",
-    routes: ["/counters", "/counters/:id", "/counters/:id/pool", "/counters/:id/history", "/activity", "/stats", "/search", "/content/:n", "/preview/:n"],
+    routes: ["/counters", "/counters/:id", "/counters/:id/pool", "/counters/:id/history", "/activity", "/stats", "/search", "/content/:n", "/preview/:n", "/stamp/:n"],
   }),
 );
 
@@ -42,6 +42,12 @@ app.get("/content/:n{[0-9]+}", (c) =>
 );
 app.get("/preview/:n{[0-9]+}", (c) =>
   serveContent(c.env, c.executionCtx, c.req.raw, Number(c.req.param("n")), "preview"),
+);
+
+/** A stamp's decoded image — the counter's `STAMP:<base64>` text as the file
+ *  it encodes. 404s for a counter that is not stamp-like. */
+app.get("/stamp/:n{[0-9]+}", (c) =>
+  serveContent(c.env, c.executionCtx, c.req.raw, Number(c.req.param("n")), "stamp"),
 );
 
 /** Manual resync, for a cold database or after a schema change. */

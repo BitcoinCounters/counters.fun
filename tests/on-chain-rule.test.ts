@@ -71,7 +71,7 @@ describe("the on-chain rule", () => {
   }, 60_000);
 
   it("routes markup to the sandbox, never to an img tag", () => {
-    const base = { is_pointer_like: false, size: 1000 };
+    const base = { is_pointer_like: false, size: 1000, stamp_mime: null };
 
     expect(renderMode({ ...base, content_type: "image/png" })).toBe("image");
     expect(renderMode({ ...base, content_type: "image/jpeg" })).toBe("image");
@@ -80,11 +80,13 @@ describe("the on-chain rule", () => {
     expect(renderMode({ ...base, content_type: "text/html" })).toBe("sandbox");
 
     // A pointer renders as nothing at all, whatever it claims to be.
-    expect(renderMode({ is_pointer_like: true, size: 64, content_type: "image/png" })).toBe("none");
+    expect(
+      renderMode({ is_pointer_like: true, size: 64, content_type: "image/png", stamp_mime: null }),
+    ).toBe("none");
   });
 
   it("shows textual content as text rather than in a browser's inspector", () => {
-    const base = { is_pointer_like: false, size: 1000 };
+    const base = { is_pointer_like: false, size: 1000, stamp_mime: null };
 
     // A browser handed application/json in a frame renders its own JSON
     // inspector, with a "Pretty print" checkbox floating over the content;
@@ -106,6 +108,42 @@ describe("the on-chain rule", () => {
     expect(renderMode({ ...base, content_type: "text/plain; charset=utf-8" })).toBe("text");
     expect(renderMode({ ...base, content_type: "audio/ogg;codecs=opus" })).toBe("document");
   });
+
+  it("shows a stamp as its decoded image, not as the base64 it is written in", () => {
+    const base = { is_pointer_like: false, size: 3750, content_type: "text/plain" };
+
+    // #188 LORDFUN: 3,750 bytes of `STAMP:<base64>` text encoding a 2,808-byte
+    // GIF. Rendered as the text it literally is, it is a wall of noise.
+    expect(renderMode({ ...base, stamp_mime: "image/gif" })).toBe("stamp");
+    expect(renderMode({ ...base, stamp_mime: "image/png" })).toBe("stamp");
+
+    // The same bytes without a successful decode stay text. `stamp_mime` is
+    // null exactly when the indexer's strict base64 check failed — #54
+    // MAGICEGG's stray space, #59 XCPFTW's stray prefix — and damaged data is
+    // never repaired here either.
+    expect(renderMode({ ...base, stamp_mime: null })).toBe("text");
+
+    // The rule still comes first: a pointer renders as nothing, stamp or not.
+    expect(
+      renderMode({ is_pointer_like: true, size: 64, content_type: "text/plain", stamp_mime: "image/gif" }),
+    ).toBe("none");
+  });
+
+  it("renders every stamp in the live index as an image", async () => {
+    const index = await fullIndex();
+    const stamps = index.filter((c) => isOnChain(c) && c.stamp_mime);
+
+    // 13 of 189 as of block 966,579. If this reaches zero the field has stopped
+    // arriving and every stamp has silently gone back to rendering as base64.
+    expect(stamps.length).toBeGreaterThan(0);
+
+    for (const c of stamps) {
+      expect(renderMode(c), `#${c.number} ${c.asset}`).toBe("stamp");
+      // Upstream only sets the field after sniffing the decoded bytes, so a
+      // stamp is always safe to put in an <img>.
+      expect(c.stamp_mime, `#${c.number} ${c.asset}`).toMatch(/^image\//);
+    }
+  }, 60_000);
 
   it("badges inscriptions by weight", () => {
     expect(sizeBadge(295)).toBeNull();

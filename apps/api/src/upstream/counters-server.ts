@@ -86,6 +86,19 @@ export class CountersServer {
     return this.passthrough(`/preview/${n}`, request);
   }
 
+  /**
+   * A stamp's decoded image. The counter's own bytes are `STAMP:<base64>`
+   * text; this route is the indexer's strict decode of them, served as the
+   * sniffed image type. 404s ("not stamp-like") for everything else.
+   *
+   * The decode lives upstream on purpose — it is the indexer's rule, and a
+   * second implementation here could disagree with it about which damaged
+   * payloads are repairable.
+   */
+  stamp(n: number, request?: Request): Promise<Response> {
+    return this.passthrough(`/stamp/${n}`, request);
+  }
+
   private passthrough(path: string, request?: Request): Promise<Response> {
     const headers = new Headers();
     // Forward Range so a client can seek inside a multi-megabyte inscription

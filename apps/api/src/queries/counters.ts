@@ -41,6 +41,9 @@ export interface CounterRow {
   content_type: string;
   size: number;
   is_pointer_like: number;
+  /** Non-null when the description is a `STAMP:<base64>` payload the indexer
+   *  decoded to an image. Drives the `stamp` render mode. */
+  stamp_mime: string | null;
   owner: string | null;
   txid: string;
   block: number;
@@ -87,7 +90,7 @@ export interface MintingCounterRow extends CounterRow {
 
 const COUNTER_COLUMNS = `
   c.number, c.asset, c.asset_longname, c.kind, c.content_type, c.size,
-  c.is_pointer_like, c.owner, c.txid, c.block, c.tx_index, c.sha256,
+  c.is_pointer_like, c.stamp_mime, c.owner, c.txid, c.block, c.tx_index, c.sha256,
   c.rolling_hash, c.supply, c.divisible, c.locked, c.burned, c.fee,
   c.tx_size, c.body, c.block_time, c.launchpad`;
 

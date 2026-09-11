@@ -59,16 +59,22 @@ export async function serveContent(
   ctx: Waiter,
   request: Request,
   number: number,
-  variant: "content" | "preview",
+  variant: "content" | "preview" | "stamp",
 ): Promise<Response> {
   // Only this site may frame a counter. The upstream's blanket
   // X-Frame-Options: DENY is what made this proxy necessary in the first
   // place; repeating it verbatim would defeat the point.
   const frameAncestors = env.WEB_ORIGIN || "'self'";
 
-  const row = await one<{ is_pointer_like: number; content_type: string; sha256: string | null; size: number }>(
+  const row = await one<{
+    is_pointer_like: number;
+    content_type: string;
+    stamp_mime: string | null;
+    sha256: string | null;
+    size: number;
+  }>(
     env.DB,
-    `SELECT is_pointer_like, content_type, sha256, size FROM counters WHERE number = ?1`,
+    `SELECT is_pointer_like, content_type, stamp_mime, sha256, size FROM counters WHERE number = ?1`,
     number,
   );
 
@@ -80,6 +86,22 @@ export async function serveContent(
       headers: { "content-type": "text/plain; charset=utf-8" },
     });
   }
+  if (variant === "stamp" && !row.stamp_mime) {
+    // Not an error in the counter — it simply is not a stamp, so there is no
+    // decoded image to serve. Matches the upstream route's own answer.
+    return new Response("not stamp-like", {
+      status: 404,
+      headers: { "content-type": "text/plain; charset=utf-8" },
+    });
+  }
+
+  // What this variant actually serves. A stamp is the one variant whose bytes
+  // are not the counter's bytes: `content_type` describes the `STAMP:<base64>`
+  // text and `size` measures it, while the response is the image that text
+  // decodes to — 2,808 bytes of image/gif behind 3,750 bytes of text/plain for
+  // #188 LORDFUN. Declaring the row's length here would leave a browser
+  // waiting on 942 bytes that never arrive.
+  const declaredType = variant === "stamp" ? row.stamp_mime! : row.content_type;
 
   // Content-addressed: the same bytes are the same object no matter which
   // number asked for them, so a reinscription of identical content is stored
@@ -93,19 +115,24 @@ export async function serveContent(
   // block on a full download of.
   if (!range) {
     const hit = await env.CONTENT.get(key);
-    if (hit) return respond(hit.body, row.content_type, row.size, frameAncestors, { cached: true });
+    // `hit.size` rather than `row.size`: R2 knows exactly what it stored, which
+    // for a derived variant (a stamp's image, a preview's wrapper) is not the
+    // counter's own byte count.
+    if (hit) return respond(hit.body, declaredType, hit.size, frameAncestors, { cached: true });
   }
 
   const server = new CountersServer(env.COUNTERS_API_BASE);
   const upstream = variant === "preview"
     ? await server.preview(number, request)
-    : await server.content(number, request);
+    : variant === "stamp"
+      ? await server.stamp(number, request)
+      : await server.content(number, request);
 
   if (!upstream.ok && upstream.status !== 206) {
     return new Response("upstream unavailable", { status: 502 });
   }
 
-  const type = upstream.headers.get("content-type") ?? row.content_type;
+  const type = upstream.headers.get("content-type") ?? declaredType;
 
   if (range || upstream.status === 206) {
     // Pass a partial straight through, headers and all — re-deriving
@@ -118,7 +145,11 @@ export async function serveContent(
     return new Response(upstream.body, { status: upstream.status, headers });
   }
 
-  const length = Number(upstream.headers.get("content-length") ?? row.size);
+  // Only the identity variant can fall back to the row's size; for a derived
+  // one an absent content-length means "unknown", and 0 suppresses the header
+  // rather than asserting a wrong number.
+  const fallbackLength = variant === "content" ? row.size : 0;
+  const length = Number(upstream.headers.get("content-length") ?? fallbackLength);
 
   // A HEAD gets no body to tee, so there is nothing to store — and trying
   // would hang the put on a stream that never delivers. Answer from the

@@ -16,6 +16,9 @@ export interface CounterRow {
   content_type: string;
   size: number;
   is_pointer_like: number;
+  /** Non-null when the description is a `STAMP:<base64>` payload the indexer
+   *  decoded to an image — see the `stamp` mode in @counters/core/counter. */
+  stamp_mime: string | null;
   owner: string | null;
   txid: string;
   block: number;

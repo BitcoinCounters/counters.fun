@@ -40,10 +40,14 @@ function Shell({
           contentType={counter.content_type}
           size={counter.size}
           isPointerLike={counter.is_pointer_like === 1}
+          stampMime={counter.stamp_mime}
           body={counter.body}
         />
         <span className="absolute right-2 top-2 rounded-md border border-line bg-black/60 px-1.5 py-0.5 font-mono text-[9.5px] uppercase tracking-[0.08em] text-dim">
-          {mimeTag(counter.content_type)}
+          {/* The badge labels the tile under it, so a stamp reads GIF rather
+              than PLAIN. The counter's own `text/plain` is not hidden — the
+              detail page still states what the witness actually holds. */}
+          {mimeTag(counter.stamp_mime ?? counter.content_type)}
         </span>
         {badge && (
           <span className="absolute left-2 top-2 rounded-md border border-gold/40 bg-black/60 px-1.5 py-0.5 font-mono text-[9.5px] uppercase tracking-[0.08em] text-gold">
