@@ -143,6 +143,26 @@ export async function fetchBtcFunds(address: string): Promise<BtcFunds> {
   return { confirmed, unconfirmed, utxos: rows.length };
 }
 
+/**
+ * Does this node know the transaction?
+ *
+ * Asked after a broadcast, because "the relay returned a txid" and "the
+ * transaction exists" are not the same claim — a wallet's own backend answered
+ * one with a txid for a reveal that never reached any mempool, and the app
+ * reported a finished mint over a commit that sat mined and unspent. A 404
+ * here is a real answer: this node has never seen it.
+ */
+export async function nodeKnowsTransaction(txid: string): Promise<boolean> {
+  try {
+    await cpGet<string>(`bitcoin/transactions/${encodeURIComponent(txid)}?result_format=hex`);
+    return true;
+  } catch (cause) {
+    if (cause instanceof CpNotFound) return false;
+    // Anything else is the node failing to answer, which is not an answer.
+    throw cause;
+  }
+}
+
 /** The chain tip Counterparty has parsed to. */
 export async function fetchTip(): Promise<number> {
   const block = await cpGet<{ block_index: number }>("blocks/last");
