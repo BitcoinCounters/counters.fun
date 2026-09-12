@@ -283,11 +283,11 @@ describe("the Esplora fallback Horizon depends on", () => {
     // the inscription context.
     expect(xcpAdapter.capabilities.broadcasts).toBe(true);
     expect(xcpAdapter.capabilities.requiresInscriptionContext).toBe(true);
-    // And that context is only read for an ord envelope — which decides how
-    // much the wallet can prove, not whether the mint is possible.
-    expect(xcpAdapter.capabilities.verifiesOrdEnvelopeOnly).toBe(true);
+    // Its parser reads ord envelopes only, and the reveal has no second door,
+    // so a native mint on this wallet cannot be completed at all.
+    expect(xcpAdapter.capabilities.signsOrdEnvelopeOnly).toBe(true);
 
     const { horizonAdapter } = await import("../apps/web/src/lib/wallet/adapters/horizon");
-    expect(horizonAdapter.capabilities.verifiesOrdEnvelopeOnly).toBe(false);
+    expect(horizonAdapter.capabilities.signsOrdEnvelopeOnly).toBe(false);
   });
 });

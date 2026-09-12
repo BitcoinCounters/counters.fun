@@ -306,6 +306,18 @@ export async function mintCounter(
     }
   }
 
+  // Refused here, before a commit exists. A wallet that cannot read this
+  // envelope will sign the commit — a commit is only a payment, and it has a
+  // door for that — and then refuse the reveal, which has no door at all. The
+  // coins would already be on chain by then. See `signsOrdEnvelopeOnly`.
+  if (wallet.capabilities.signsOrdEnvelopeOnly && req.envelope !== "counterparty/ord") {
+    throw new Error(
+      `${wallet.name} cannot sign the reveal for a counterparty native envelope, and a mint that ` +
+        "stops there leaves the commit on chain. Choose the counterparty + ord envelope, or " +
+        "connect a wallet that signs either. Nothing was composed.",
+    );
+  }
+
   onStage?.("composing");
   const { compose, asset, lpAsset } = await composeMint(req);
   const fairminter = req.fairminter ? { ...req.fairminter, lpAsset } : undefined;

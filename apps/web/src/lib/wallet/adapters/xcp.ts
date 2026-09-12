@@ -171,9 +171,8 @@ export const xcpAdapter: WalletAdapter = {
   capabilities: {
     broadcasts: true,
     requiresInscriptionContext: true,
-    // Its `verifyInscriptionCommit` parses ord envelopes only; a native commit
-    // is proved as a declared payment instead.
-    verifiesOrdEnvelopeOnly: true,
+    // Its parser reads ord envelopes only, and the reveal has no second door.
+    signsOrdEnvelopeOnly: true,
     bip322: true,
   },
 };
