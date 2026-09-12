@@ -317,7 +317,12 @@ export function signRevealLocally(revealPsbt: string, privateKey: Uint8Array): s
   // false. Both mean the same thing, and neither says it usefully.
   let signed = false;
   try {
-    signed = tx.signIdx(privateKey, 0);
+    // The allowed sighashes have to be spelled out. The reveal input declares
+    // SIGHASH_ALL — the wallets require it, and Core's commit was funded for
+    // the 65-byte signature it produces — while scure defaults to permitting
+    // SIGHASH_DEFAULT alone and silently signs nothing when the input asks for
+    // anything else. "Nothing signed" and "wrong key" then look identical.
+    signed = tx.signIdx(privateKey, 0, [SigHash.DEFAULT, SigHash.ALL]);
   } catch (cause) {
     throw new Error("The reveal key does not match the envelope it is meant to open.", { cause });
   }
