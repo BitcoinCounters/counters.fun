@@ -38,7 +38,7 @@ export function SiteHeader() {
                 href={item.href}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="rounded-md px-3 py-1.5 font-mono text-[12.5px] uppercase tracking-[0.06em] text-dim transition-colors hover:bg-card hover:text-ink"
+                className="whitespace-nowrap rounded-md px-3 py-1.5 font-mono text-[12.5px] uppercase tracking-[0.06em] text-dim transition-colors hover:bg-card hover:text-ink"
               >
                 {item.label}
               </a>
@@ -47,7 +47,7 @@ export function SiteHeader() {
                 key={item.href}
                 href={item.href}
                 aria-current={pathname === item.href ? "page" : undefined}
-                className={`rounded-md px-3 py-1.5 font-mono text-[12.5px] uppercase tracking-[0.06em] transition-colors hover:bg-card hover:text-ink ${
+                className={`whitespace-nowrap rounded-md px-3 py-1.5 font-mono text-[12.5px] uppercase tracking-[0.06em] transition-colors hover:bg-card hover:text-ink ${
                   pathname === item.href ? "text-copper" : "text-dim"
                 }`}
               >
@@ -58,7 +58,6 @@ export function SiteHeader() {
         </nav>
 
         <div className="ml-auto flex items-center gap-2">
-          <PriceTicker />
           <AboutPanel />
           <WalletButton />
           {/* Below the nav breakpoint the links are hidden, and without this
@@ -82,14 +81,19 @@ export function SiteHeader() {
       </div>
 
       {/* Search gets its own row: a wide field reads as a search, not a
-          filter. The home page places it under its stats row instead. */}
-      {pathname !== "/" && (
-        <div className="border-t border-line/60">
-          <div className="mx-auto w-full max-w-[1120px] px-5 py-2">
+          filter. The prices ride along at its right rather than in the row
+          above — the nav and both pills do not fit across 1120px together,
+          and the nav wrapping mid-item is what made the header look like a
+          different header on every page. Identical on every page, home
+          included, so nothing here depends on the route. */}
+      <div className="border-t border-line/60">
+        <div className="mx-auto flex w-full max-w-[1120px] flex-wrap items-center gap-x-3 gap-y-2 px-5 py-2">
+          <div className="min-w-[220px] flex-1">
             <SearchBox wide />
           </div>
+          <PriceTicker placement="row" />
         </div>
-      )}
+      </div>
 
       {open && (
         <nav className="border-t border-line bg-bg px-5 py-2 nav:hidden">

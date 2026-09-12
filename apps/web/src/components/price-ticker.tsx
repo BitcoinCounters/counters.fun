@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { usePathname } from "next/navigation";
 import { copy } from "@content/copy";
 
 interface Prices {
@@ -16,7 +15,6 @@ interface Prices {
  */
 export function PriceTicker({ placement = "header" }: { placement?: "header" | "row" }) {
   const [prices, setPrices] = useState<Prices | null>(null);
-  const pathname = usePathname();
 
   useEffect(() => {
     let cancelled = false;
@@ -33,12 +31,11 @@ export function PriceTicker({ placement = "header" }: { placement?: "header" | "
     };
   }, []);
 
-  // The home page carries the prices in its own stats row.
-  if (!prices || (placement === "header" && pathname === "/")) return null;
+  if (!prices) return null;
   const usd = (v: number, digits: number) => v.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
   const pct = (v: number | null) => (v === null ? "—" : `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`);
   return (
-    <div className={placement === "header" ? "hidden items-center gap-2 nav:flex" : "flex flex-wrap items-center gap-2"}>
+    <div className={placement === "header" ? "hidden items-center gap-2 nav:flex" : "flex shrink-0 flex-wrap items-center gap-2"}>
       <Pill icon="₿" tone="text-gold" value={`$${usd(prices.btc.usd, 0)}`} change={prices.btc.change30d} title={copy.prices.btc(pct(prices.btc.change24h), prices.btc.source)} />
       {prices.xcp && (
         <Pill
