@@ -2,8 +2,6 @@ import Link from "next/link";
 import { getHome, getStats } from "@/lib/api";
 import { MintingCard, PooledCard, UnpooledCard, totalDepth } from "@/components/counter-card";
 import { fmtCompact, fmtSize } from "@/lib/format";
-import { PriceTicker } from "@/components/price-ticker";
-import { SearchBox } from "@/components/search-box";
 import { SortSelect } from "@/components/sort-select";
 import { copy } from "@content/copy";
 
@@ -36,9 +34,10 @@ export default async function HomePage({
 
   return (
     <>
-      {/* One line: the prices, what is on Bitcoin, and the block. The
-          introduction lives behind "about" in the header. */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pt-4 pb-1 font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
+      {/* One line: what is on Bitcoin, and the block. The prices and the
+          search live in the header, the same on every page; the introduction
+          lives behind "about" there too. */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pt-4 pb-2 font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
         <span className="whitespace-nowrap">
           <span className="text-[13px] font-semibold tracking-normal text-ink">{fmtSize(stats.bytes_on_chain)}</span> {copy.home.stats.bytes}
         </span>
@@ -46,13 +45,6 @@ export default async function HomePage({
         <span className="whitespace-nowrap">
           {copy.home.chainLine} <span className="text-[13px] font-semibold tracking-normal text-ink">{stats.tip.toLocaleString("en-US")}</span>
         </span>
-        <span className="ml-auto">
-          <PriceTicker placement="row" />
-        </span>
-      </div>
-
-      <div className="pb-2 pt-2">
-        <SearchBox wide />
       </div>
 
       <Section
