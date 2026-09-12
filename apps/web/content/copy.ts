@@ -225,6 +225,16 @@ export const copy = {
       reinscribeNotYours: (owner: string) => `${owner} owns this asset, not the connected address.`,
       reinscribeReady: (mime: string | null) =>
         `Yours. Its current description is ${mime ?? "on chain"}; the new file replaces it.`,
+      notTaproot: "The connected address is not taproot, so the commit cannot name your key.",
+      owned: {
+        label: "yours to reinscribe",
+        loading: "reading what this address owns…",
+        failed: "Could not read what this address owns. Type the name instead.",
+        empty: "This address owns no assets yet.",
+        lockedTag: "description locked",
+        noFile: "no description",
+        hint: "Pick one, or type a name above.",
+      },
       xcp69Exists: "A launch needs a name nobody has issued yet.",
     },
     lockDescription: {
