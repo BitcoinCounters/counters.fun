@@ -86,19 +86,33 @@ async function syncCounters(
   const cold = known < 0;
 
   const WARM_PAGES = 5;
-  const fresh: Counter[] = [];
+  const fetched: Counter[] = [];
+  let unseen = 0;
   let hitPageCap = false;
 
   for await (const batch of server.walk(100, cold ? 200 : WARM_PAGES)) {
-    const wanted = cold ? batch : batch.filter((c) => c.number > known);
-    fresh.push(...wanted);
+    const novel = cold ? batch.length : batch.filter((c) => c.number > known).length;
+    unseen += novel;
+
+    // Every counter on a page is upserted, not only the ones we have never
+    // seen. A counter's *file* is immutable once numbered, but its supply is
+    // not: a fairminter deploy is inscribed with a supply of 0 and grows with
+    // every mint against it, so the row written the tick it appeared is wrong
+    // by the next one. #188 LORDFUN sat at supply 0 against a real 37M-token
+    // pool, which ranked it last by market cap instead of first.
+    //
+    // This costs nothing to fetch — the page is downloaded either way and the
+    // known half of it used to be discarded — and the upsert already updates
+    // exactly the fields that can still change.
+    fetched.push(...batch);
+
     // Warm path: the first page that reaches numbers we already hold means
     // everything below it is already stored.
-    if (!cold && wanted.length < batch.length) {
+    if (!cold && novel < batch.length) {
       hitPageCap = false;
       break;
     }
-    hitPageCap = !cold && fresh.length >= WARM_PAGES * 100;
+    hitPageCap = !cold && unseen >= WARM_PAGES * 100;
   }
 
   // Reaching the page cap without meeting a known number means the walk
@@ -111,7 +125,7 @@ async function syncCounters(
     await setState(db, "counters_walk_truncated", String(Date.now()));
   }
 
-  if (fresh.length > 0) await upsertCounters(db, fresh);
+  if (fetched.length > 0) await upsertCounters(db, fetched);
 
   const filled = await backfillGaps(db, server);
 
@@ -124,7 +138,10 @@ async function syncCounters(
     String(Math.max(0, upstreamCount - (stored?.n ?? 0))),
   );
 
-  return fresh.length + filled;
+  // Counted as new counters, not as rows touched: a refresh of something
+  // already stored is not an addition, and the report is read as "how much
+  // did the index grow".
+  return unseen + filled;
 }
 
 /**
