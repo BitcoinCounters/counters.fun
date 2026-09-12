@@ -195,8 +195,8 @@ export const horizonAdapter: WalletAdapter = {
   capabilities: {
     broadcasts: false,
     requiresInscriptionContext: false,
-    // No inscription gate at all, so nothing about the envelope reaches it.
-    verifiesOrdEnvelopeOnly: false,
+    // No gate at all, so nothing about the envelope reaches it.
+    signsOrdEnvelopeOnly: false,
     bip322: false,
   },
 };

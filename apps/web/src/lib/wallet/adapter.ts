@@ -70,20 +70,29 @@ export interface WalletCapabilities {
   /** Requires an inscription context before it will sign a commit. */
   requiresInscriptionContext: boolean;
   /**
-   * The wallet's inscription check can only read an **ord** envelope.
+   * The wallet can only complete a mint in the **ord** envelope, both legs.
    *
-   * Its verifier is an ord-envelope parser: it requires the leaf to open
-   * `OP_FALSE OP_IF "ord"`, and reads the metaprotocol (tag 7), the MIME type
-   * (tag 1) and the Counterparty message out of ord's CBOR metadata (tag 5).
+   * Its envelope parser is an ord parser: the leaf must open
+   * `OP_FALSE OP_IF "ord"`, with the metaprotocol (tag 7), the MIME type
+   * (tag 1) and the Counterparty message in ord's CBOR metadata (tag 5).
    * Core's native envelope goes straight to its data after `OP_IF`, so that
-   * parser gives up at the third opcode.
+   * parser gives up at the third opcode. Two consequences, and the second is
+   * the one that matters:
    *
-   * This is not a limit on what can be minted — a native commit goes through
-   * the wallet's plain-payment door instead ({@link WalletAdapter.signCommit})
-   * — but it does decide how much the wallet can verify for itself, so the
-   * form says which of the two the person is about to approve.
+   *   - the **commit** has a second door — a declared Bitcoin payment, which
+   *     is what a commit is anyway ({@link WalletAdapter.signCommit}); but
+   *   - the **reveal** has none. The wallet recognises a Counterparty
+   *     transaction by decrypting its `OP_RETURN`, and a taproot-encoded
+   *     reveal carries the literal `CNTRPRTY` marker, which that path skips on
+   *     purpose; so its only other route is the envelope parser. And the
+   *     payment door refuses a transaction with a data output.
+   *
+   * So a native mint on such a wallet signs its commit and then cannot sign
+   * the reveal — the worst outcome available, since the commit is on chain by
+   * then and the coins sit in an envelope nothing can open. The mint refuses
+   * the combination before composing anything.
    */
-  verifiesOrdEnvelopeOnly: boolean;
+  signsOrdEnvelopeOnly: boolean;
   /** Proves address ownership on connect (BIP-322). Horizon signs BIP-137 instead. */
   bip322: boolean;
 }

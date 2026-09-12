@@ -336,11 +336,11 @@ export function MintForm() {
     };
   }, [route]);
 
-  // Both envelopes mint. What changes with an XCP Wallet is how much it can
-  // check for itself before it signs the commit — its inscription verifier
-  // reads ord envelopes only — so say which of its two dialogs this choice
-  // leads to rather than making the choice for anyone.
-  const commitAsPayment = (wallet.adapter?.capabilities.verifiesOrdEnvelopeOnly ?? false) && envelope === "counterparty";
+  // Both envelopes mint, and neither is a property of the asset — but a wallet
+  // that cannot read the native one signs the commit and then refuses the
+  // reveal, stranding it. The choice stays on screen with its reason; what it
+  // does not do is start.
+  const envelopeUnsignable = (wallet.adapter?.capabilities.signsOrdEnvelopeOnly ?? false) && envelope === "counterparty";
 
   const walletError = requiresTaproot(wallet.account);
   const ready =
@@ -351,6 +351,7 @@ export function MintForm() {
     (mode !== "reinscribe" || (lookup.state === "done" && isMine)) &&
     (mode !== "fairminter" || (fairminter !== null && fairminter.problems.length === 0)) &&
     lookup.state !== "checking" &&
+    !envelopeUnsignable &&
     !xcpShort &&
     fee.ok &&
     !belowFloor &&
@@ -375,11 +376,12 @@ export function MintForm() {
     if (mode === "fairminter" && (fairminter === null || fairminter.problems.length > 0)) {
       return fairminter?.problems[0] ?? copy.mint.blocked.sale;
     }
+    if (envelopeUnsignable) return copy.mint.envelope.nativeUnsignable(wallet.adapter?.name ?? "");
     if (xcpShort && typeof xcpBalance === "bigint") return copy.mint.preflight.xcpShort(String(burnXcp), fmtQty(xcpBalance, true));
     if (!fee.ok) return copy.mint.blocked.fee;
     if (belowFloor && typeof rates === "object" && rates !== null) return copy.mint.route.belowFloor(formatFeeRate(rates.submitFloor));
     return null;
-  }, [assetError, belowFloor, burnXcp, bytes, fairminter, fee.ok, isMine, lookup.state, mode, rates, walletError, wallet.address, xcpBalance, xcpShort]);
+  }, [assetError, belowFloor, burnXcp, bytes, envelopeUnsignable, fairminter, fee.ok, isMine, lookup.state, mode, rates, walletError, wallet.adapter, wallet.address, xcpBalance, xcpShort]);
 
   /* ---------------- actions ---------------- */
 
@@ -647,9 +649,9 @@ export function MintForm() {
           <Choice label={copy.mint.envelope.native} hint={copy.mint.envelope.nativeHint} active={envelope === "counterparty"} onClick={() => setEnvelope("counterparty")} />
           <Choice label={copy.mint.envelope.ord} hint={copy.mint.envelope.ordHint} active={envelope === "counterparty/ord"} onClick={() => setEnvelope("counterparty/ord")} />
         </div>
-        {commitAsPayment && (
-          <p className="mt-2 text-[11px] leading-relaxed text-faint">
-            {copy.mint.envelope.nativeAsPayment(wallet.adapter?.name ?? "")}
+        {envelopeUnsignable && (
+          <p className="mt-2 text-[11px] leading-relaxed text-gold">
+            {copy.mint.envelope.nativeUnsignable(wallet.adapter?.name ?? "")}
           </p>
         )}
         <div className="mt-4 border-t border-line2 pt-3">
