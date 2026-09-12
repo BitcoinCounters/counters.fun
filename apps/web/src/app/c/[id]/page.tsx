@@ -60,30 +60,8 @@ export async function generateMetadata({
   const title = copy.site.counter.title(counter.number, counter.asset);
   const alt = copy.site.counter.imageAlt(counter.number, counter.asset);
 
-  if (!isDisplayable(counter)) {
-    // The site card rather than nothing: a preview with no image at all reads
-    // as a broken link, and this counter is neither broken nor absent — it is
-    // real, numbered, and deliberately not rendered.
-    const pointer = copy.site.counter.pointer(counter.asset);
-    return {
-      title,
-      description: pointer,
-      openGraph: {
-        title,
-        description: pointer,
-        type: "article",
-        url: `${SITE_URL}/c/${counter.number}`,
-        siteName: copy.site.title,
-        images: [{ url: "/og.png", alt: copy.site.ogImageAlt }],
-      },
-      twitter: {
-        card: "summary_large_image",
-        title,
-        description: pointer,
-        images: [{ url: "/og.png", alt: copy.site.ogImageAlt }],
-      },
-    };
-  }
+  // A pointer 404s below, so it gets no card of its own.
+  if (!isDisplayable(counter)) return {};
 
   const mode = renderMode({
     is_pointer_like: counter.is_pointer_like === 1,
@@ -141,10 +119,11 @@ export default async function CounterPage({ params }: { params: Promise<{ id: st
   const counter = await getCounter(id).catch(() => null);
   if (!counter) notFound();
 
-  // A pointer-like counter is real and numbered — it is just not something
-  // this site will render. Saying that plainly is more useful than a 404 that
-  // implies the counter does not exist.
-  if (!isDisplayable(counter)) return <PointerPage counter={counter} />;
+  // A pointer's description is a URL, so there is nothing here to show and
+  // nothing here to trade. It is a real counter and the reference explorer
+  // has a page for it; this site is the market layer, and a market in
+  // something it will not list is not a page worth serving.
+  if (!isDisplayable(counter)) notFound();
 
   const pool = counter.pool ? await getPool(String(counter.number)).catch(() => null) : null;
   const change = pctChange(counter.pool?.price ?? null, counter.pool?.price_24h_ago ?? null);
@@ -380,46 +359,6 @@ function Provenance({ counter }: { counter: Extract<Awaited<ReturnType<typeof ge
         />
       </div>
     </section>
-  );
-}
-
-function PointerPage({
-  counter,
-}: {
-  counter: Extract<Awaited<ReturnType<typeof getCounter>>, { displayable: false }>;
-}) {
-  return (
-    <div className="mx-auto max-w-[62ch] py-20">
-      <div className="mb-4 flex items-center gap-3">
-        <Meter value={counter.number} size={22} />
-        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
-          off-chain pointer
-        </span>
-      </div>
-      <h1 className="mb-4 font-mono text-3xl font-semibold text-dim">{counter.asset}</h1>
-      <p className="mb-5 text-dim">
-        Counter #{counter.number} is real, numbered and permanent. Its description is not a file —
-        it is an address somewhere else, so there is nothing in Bitcoin to show you.
-      </p>
-      <div className="mb-5 rounded-xl border border-line bg-card p-4">
-        <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.16em] text-faint">
-          what was inscribed
-        </div>
-        {/* Shown as text, deliberately not a link. Following it is the one
-            thing this site does not do. */}
-        <code className="block break-all font-mono text-xs text-dim">
-          {counter.description ?? "(empty)"}
-        </code>
-      </div>
-      <p className="text-sm text-faint">
-        counters.fun does not fetch it. Ninety-eight of the index&rsquo;s counters are pointers like
-        this one; the{" "}
-        <Link href="/" className="text-copper underline-offset-2 hover:underline">
-          seventy that are files
-        </Link>{" "}
-        are what this site is for.
-      </p>
-    </div>
   );
 }
 
