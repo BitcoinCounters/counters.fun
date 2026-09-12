@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useWallet } from "@/lib/wallet/wallet-context";
-import { requiresTaproot, xOnly } from "@/lib/wallet/adapter";
+import { requiresTaproot, taprootOutputKey } from "@/lib/wallet/adapter";
 import { guessContentType, classifyMimeType } from "@/lib/inscribe/content";
 import {
   BelowSlipstreamFloorError,
@@ -33,7 +33,7 @@ import { classifyAssetName, issuanceBurnXcp, randomNumericAsset } from "@counter
 import { XCP69, XCP69_DEFAULT_START_LEAD, XCP69_MIN_START_LEAD, xcp69Params, xcp69Schedule } from "@counters/core/xcp69";
 import { fairminterProblems, type FairminterParams } from "@counters/core/fairminter";
 import { parseUnitsToRaw } from "@counters/core/numeric";
-import { fetchAsset, fetchBalance, fetchBtcFunds, fetchTip, type AssetInfo, type BtcFunds } from "@/lib/cp";
+import { fetchAsset, fetchBalance, fetchBtcFunds, fetchOwnedAssets, fetchTip, type AssetInfo, type BtcFunds, type OwnedAsset } from "@/lib/cp";
 import { describeError, isCancellation } from "@/lib/errors";
 import { clearPendingMint, loadPendingMint, savePendingMint, type PendingMint } from "@/lib/pending-mint";
 
@@ -142,6 +142,7 @@ export function MintForm() {
   const setSaleField = useCallback(<K extends keyof SaleFields>(key: K, value: SaleFields[K]) => setSale((f) => ({ ...f, [key]: value })), []);
 
   const [lookup, setLookup] = useState<AssetLookup>({ state: "idle" });
+  const [owned, setOwned] = useState<OwnedAsset[] | null | "error">(null);
   const [xcpBalance, setXcpBalance] = useState<bigint | null | "error">(null);
   const [btc, setBtc] = useState<BtcFunds | null | "error">(null);
 
@@ -192,6 +193,21 @@ export function MintForm() {
       clearTimeout(timer);
     };
   }, [asset]);
+
+  // What this address owns, for the reinscribe picker. Read through the site's
+  // own route, which pages Counterparty and drops the descriptions — an
+  // inscribed asset carries its whole file on every row.
+  useEffect(() => {
+    if (mode !== "reinscribe" || !wallet.address) return;
+    let cancelled = false;
+    setOwned(null);
+    fetchOwnedAssets(wallet.address)
+      .then((rows) => !cancelled && setOwned(rows))
+      .catch(() => !cancelled && setOwned("error"));
+    return () => {
+      cancelled = true;
+    };
+  }, [mode, wallet.address]);
 
   // Balances at the connected address, for the pre-flight card.
   useEffect(() => {
@@ -338,10 +354,17 @@ export function MintForm() {
   /* ---------------- actions ---------------- */
 
   const run = useCallback(async () => {
-    if (!bytes || !wallet.adapter || !wallet.address || !wallet.publicKey) return;
+    if (!bytes || !wallet.adapter || !wallet.address) return;
     setError(null);
     setResult(null);
     const source = wallet.address;
+    // From the address, never from the reported public key: the leaf has to
+    // name the tweaked output key or the wallet refuses the commit.
+    const sourceXOnly = taprootOutputKey(source);
+    if (!sourceXOnly) {
+      setError({ message: copy.mint.asset.notTaproot, detail: null });
+      return;
+    }
 
     try {
       const mint = await mintCounter(
@@ -349,7 +372,7 @@ export function MintForm() {
         {
           mode,
           source,
-          sourceXOnly: xOnly(wallet.publicKey),
+          sourceXOnly,
           asset: asset.trim(),
           body: bytes,
           mimeType,
@@ -394,7 +417,7 @@ export function MintForm() {
     } finally {
       setStage(null);
     }
-  }, [asset, bytes, divisible, envelope, fairminter, fee.rate, lockQuantity, mimeType, mode, preset, route, supply, wallet.adapter, wallet.address, wallet.publicKey]);
+  }, [asset, bytes, divisible, envelope, fairminter, fee.rate, lockQuantity, mimeType, mode, preset, route, supply, wallet.adapter, wallet.address]);
 
   const resume = useCallback(async () => {
     if (!pending || !wallet.adapter || !wallet.address) return;
@@ -512,6 +535,7 @@ export function MintForm() {
         )}
         {mode === "reinscribe" && (
           <div className="mt-4 flex flex-col gap-2 border-t border-line2 pt-3">
+            {wallet.address && <OwnedPicker owned={owned} selected={asset} onPick={setAsset} />}
             <Toggle label={copy.mint.lockDescription.label} value={lockDesc} onChange={setLockDesc} />
             {lockDesc && <p className="text-[11px] text-faint">{copy.mint.lockDescription.hint}</p>}
           </div>
@@ -878,6 +902,55 @@ function FileDrop({ file, bytes, onFile }: { file: File | null; bytes: Uint8Arra
         </>
       )}
     </label>
+  );
+}
+
+/**
+ * The assets this address owns, to pick from instead of typing a name.
+ *
+ * An asset whose description is locked is shown and not offered: it is still
+ * theirs, and leaving it out of the list would read as the wallet having lost
+ * it. Everything else about *why* a pick cannot be reinscribed — a fairminter
+ * still minting, an asset that moved — is the name field's business, since a
+ * typed name has to answer for the same things.
+ */
+function OwnedPicker({ owned, selected, onPick }: { owned: OwnedAsset[] | null | "error"; selected: string; onPick: (asset: string) => void }) {
+  const c = copy.mint.asset.owned;
+
+  if (owned === null) return <p className="text-[11px] text-faint">{c.loading}</p>;
+  if (owned === "error") return <p className="text-[11px] text-faint">{c.failed}</p>;
+  if (owned.length === 0) return <p className="text-[11px] text-faint">{c.empty}</p>;
+
+  return (
+    <div>
+      <div className="mb-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-faint">{c.label}</div>
+      <div className="flex max-h-64 flex-col gap-1 overflow-y-auto pr-1">
+        {owned.map((a) => {
+          const name = a.asset_longname ?? a.asset;
+          const active = selected === a.asset || selected === name;
+          return (
+            <button
+              key={a.asset}
+              onClick={() => onPick(a.asset_longname ?? a.asset)}
+              disabled={a.description_locked}
+              className={`flex items-center justify-between gap-3 rounded-lg border px-2.5 py-1.5 text-left transition-colors disabled:cursor-not-allowed ${
+                active ? "border-copper bg-copper-ghost" : "border-line hover:border-line2"
+              } ${a.description_locked ? "opacity-45" : ""}`}
+            >
+              <span className={`truncate font-mono text-xs ${active ? "text-copper2" : "text-dim"}`}>{name}</span>
+              <span className="shrink-0 font-mono text-[10px] text-faint">
+                {a.description_locked
+                  ? c.lockedTag
+                  : a.description_bytes === 0
+                    ? c.noFile
+                    : `${a.mime_type ?? "binary"} · ${fmtSize(a.description_bytes)}`}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      <p className="mt-1.5 text-[11px] text-faint">{c.hint}</p>
+    </div>
   );
 }
 

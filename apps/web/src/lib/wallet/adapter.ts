@@ -28,6 +28,8 @@
  * it to approve a commit at all, and Horizon ignores an unknown field.
  */
 
+import { Address } from "@scure/btc-signer";
+
 export type WalletId = "xcp" | "horizon";
 
 export interface WalletAccount {
@@ -119,13 +121,25 @@ export function requiresTaproot(account: WalletAccount | null): string | null {
   return null;
 }
 
-/** The x-only half of a compressed public key — what the envelope leaf carries. */
-export function xOnly(publicKeyHex: string): Uint8Array {
-  const clean = publicKeyHex.startsWith("0x") ? publicKeyHex.slice(2) : publicKeyHex;
-  const bytes = new Uint8Array(clean.length / 2);
-  for (let i = 0; i < bytes.length; i += 1) {
-    bytes[i] = Number.parseInt(clean.slice(i * 2, i * 2 + 2), 16);
+/**
+ * The x-only taproot OUTPUT key behind a bc1p address — what the envelope leaf
+ * must name.
+ *
+ * It has to come from the address, not from the public key the wallet reports.
+ * Both wallets report the *derived* key for the account (BIP86's internal
+ * key); the address's witness program is that key **tweaked**, and the two are
+ * different 32 bytes. XCP Wallet verifies the leaf against exactly this value
+ * — `Address().decode(signerAddress).pubkey` — before it will approve a commit
+ * that moves BTC for a reason the bytes alone cannot prove, and it signs the
+ * reveal with the tweaked private key that matches it. A leaf naming the
+ * untweaked key is refused as "not spendable by your key", and under the
+ * blanket block that follows it reads as "Not a Counterparty Transaction".
+ */
+export function taprootOutputKey(address: string): Uint8Array | null {
+  try {
+    const decoded = Address().decode(address) as { type: string; pubkey?: Uint8Array };
+    return decoded.type === "tr" && decoded.pubkey?.length === 32 ? decoded.pubkey : null;
+  } catch {
+    return null;
   }
-  // 33 bytes = compressed, with a parity prefix to drop; 32 = already x-only.
-  return bytes.length === 33 ? bytes.subarray(1) : bytes;
 }

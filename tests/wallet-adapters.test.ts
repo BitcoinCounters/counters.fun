@@ -14,24 +14,35 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { requiresTaproot, xOnly } from "../apps/web/src/lib/wallet/adapter";
+import { requiresTaproot, taprootOutputKey } from "../apps/web/src/lib/wallet/adapter";
+import { bytesToHex } from "../apps/web/src/lib/inscribe/envelope";
 
 /* -------------------------------------------------------------------- */
 /* Shared contract                                                      */
 /* -------------------------------------------------------------------- */
 
 describe("the adapter contract", () => {
-  it("takes the x-only half of a compressed key, and leaves an x-only key alone", () => {
-    const compressed = "02" + "ab".repeat(32);
-    expect(xOnly(compressed)).toHaveLength(32);
-    expect(xOnly(compressed)[0]).toBe(0xab);
+  /**
+   * BIP-86's own test vector, and the reason the leaf key comes from the
+   * address. The wallet reports the derived (internal) key; the address's
+   * witness program is that key tweaked, and XCP Wallet checks the envelope
+   * leaf against the tweaked one before it will approve a commit.
+   */
+  it("reads the taproot OUTPUT key out of a bc1p address, not the internal one", () => {
+    const address = "bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxqkedrcr";
+    const internalKey = "cc8a4bc64d897bddc5fbc2f670f7a8ba0b386779106cf1223c6fc5d7cd6fc115";
 
-    const already = "cd".repeat(32);
-    expect(xOnly(already)).toHaveLength(32);
-    expect(xOnly(already)[0]).toBe(0xcd);
+    const key = taprootOutputKey(address);
+    expect(key).not.toBeNull();
+    expect(key).toHaveLength(32);
+    expect(bytesToHex(key!)).toBe("a60869f0dbcf1dc659c9cecbaf8050135ea9e8cdc487053f1dc6880949dc684c");
+    expect(bytesToHex(key!)).not.toBe(internalKey);
+  });
 
-    // Odd-parity prefix is dropped the same way — the leaf carries x-only.
-    expect(xOnly("03" + "11".repeat(32))).toHaveLength(32);
+  it("has no output key for an address that is not taproot", () => {
+    expect(taprootOutputKey("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4")).toBeNull();
+    expect(taprootOutputKey("1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2")).toBeNull();
+    expect(taprootOutputKey("not an address")).toBeNull();
   });
 
   it("refuses to mint from a non-taproot account", () => {

@@ -98,6 +98,31 @@ export async function fetchBalance(address: string, asset: string): Promise<bigi
   return rows.reduce((sum, r) => sum + big(r.quantity), 0n);
 }
 
+/**
+ * One asset an address owns, as the reinscribe picker needs it: everything but
+ * the file. `/api/owned` pages Counterparty and strips the descriptions, which
+ * for inscribed assets are megabytes of image.
+ */
+export interface OwnedAsset {
+  asset: string;
+  asset_longname: string | null;
+  divisible: boolean;
+  locked: boolean;
+  supply: string;
+  description_locked: boolean;
+  mime_type: string | null;
+  /** Size of the description on chain, in bytes. 0 means it has none. */
+  description_bytes: number;
+  last_issuance_block_index: number | null;
+}
+
+/** Everything the address owns, newest issuance first. Throws on a failure. */
+export async function fetchOwnedAssets(address: string): Promise<OwnedAsset[]> {
+  const path = `owned?address=${encodeURIComponent(address)}`;
+  const res = await fetch(`/api/${path}`, { cache: "no-store" });
+  return parse<OwnedAsset[]>(res, path);
+}
+
 export interface BtcFunds {
   confirmed: bigint;
   unconfirmed: bigint;
