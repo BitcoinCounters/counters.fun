@@ -65,6 +65,11 @@ export const copy = {
     /** The line under the stats — the label before the block height. */
     chainLine: "block",
 
+    /** Labels the listings as a whole, above the first section's heading.
+     *  Names the premise rather than a category: everything below this line
+     *  is a file that is actually in a Bitcoin block. */
+    listingsEyebrow: "onchain assets",
+
     pooled: {
       title: "Pooled",
       meta: (depth: string) => `${depth} XCP of liquidity`,
