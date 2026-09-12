@@ -5,7 +5,10 @@
  * sat/kB, which hides every sub-1 estimate — and this node relays down to 0.
  * So the numbers come straight from bitcoind, over a fixed list of three
  * read-only RPCs; nothing here is a passthrough. Credentials are server-side
- * env (`BITCOIN_RPC_URL`, `BITCOIN_RPC_USER`, `BITCOIN_RPC_PASSWORD`). If
+ * env: `BITCOIN_RPC_URL` with either `BITCOIN_RPC_USER`/`BITCOIN_RPC_PASSWORD`
+ * or `BITCOIN_RPC_COOKIE`, the path to bitcoind's own `.cookie` — which is what
+ * a node run without an rpcauth line has, and it is re-read per request because
+ * bitcoind writes a new one every restart. If
  * bitcoind does not answer, the local mempool backend (`MEMPOOL_API_BASE`,
  * the one Service-Manager runs on :8999) supplies its precise estimates —
  * also sub-1 capable. Nothing off this machine is ever asked.
@@ -18,6 +21,7 @@ export const dynamic = "force-dynamic";
 const URL_ = process.env.BITCOIN_RPC_URL ?? "";
 const USER = process.env.BITCOIN_RPC_USER ?? "";
 const PASSWORD = process.env.BITCOIN_RPC_PASSWORD ?? "";
+const COOKIE = process.env.BITCOIN_RPC_COOKIE ?? "";
 const MEMPOOL = (process.env.MEMPOOL_API_BASE ?? "http://127.0.0.1:8999/api").replace(/\/+$/, "");
 
 const TARGETS: { key: "fast" | "normal" | "economy"; target: number }[] = [
@@ -26,12 +30,19 @@ const TARGETS: { key: "fast" | "normal" | "economy"; target: number }[] = [
   { key: "economy", target: 144 },
 ];
 
+/** `user:password`, from the cookie file when there is one. */
+async function credentials(): Promise<string> {
+  if (!COOKIE) return `${USER}:${PASSWORD}`;
+  const { readFile } = await import("node:fs/promises");
+  return (await readFile(COOKIE, "utf8")).trim();
+}
+
 async function rpc<T>(method: string, params: unknown[] = []): Promise<T> {
   const res = await fetch(URL_, {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      authorization: `Basic ${Buffer.from(`${USER}:${PASSWORD}`).toString("base64")}`,
+      authorization: `Basic ${Buffer.from(await credentials()).toString("base64")}`,
     },
     body: JSON.stringify({ jsonrpc: "1.0", id: "fees", method, params }),
     signal: AbortSignal.timeout(4000),
