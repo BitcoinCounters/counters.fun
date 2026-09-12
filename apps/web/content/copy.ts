@@ -332,7 +332,7 @@ export const copy = {
       jobNote: "This page can be closed. The server keeps working on it, and the job can be checked by commit txid.",
     },
     footnote:
-      "Two transactions: a commit that funds the envelope, then a reveal that spends it and puts the file in Bitcoin. The commit is broadcast before the reveal is signed — a browser wallet cannot sign an input whose parent it cannot find. If the reveal signature fails, nothing is lost: the envelope names your key, so it can be signed again.",
+      "Two transactions: a commit that funds the envelope, then a reveal that spends it and puts the file in Bitcoin. The commit is broadcast before the reveal is signed — a browser wallet cannot sign an input whose parent it cannot find. A reveal that fails to broadcast can be signed again, because the envelope names your key rather than a key the node threw away; a reveal your wallet will not sign at all is the case this form refuses to start.",
 
     stages: {
       checking: "Checking balances…",
