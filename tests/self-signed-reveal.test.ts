@@ -13,7 +13,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { RawTx, Transaction, taprootNumsKey } from "@scure/btc-signer";
+import { RawTx, SigHash, Transaction, taprootNumsKey } from "@scure/btc-signer";
 import {
   LEAF_VERSION,
   bytesToHex,
@@ -48,6 +48,11 @@ function revealPsbt(commit: ReturnType<typeof commitEnvelope>): string {
       ],
     ],
     tapInternalKey: commit.internalKey,
+    // Exactly as `buildRevealPsbt` declares it. Leaving this out is what let a
+    // broken signer pass: scure permits SIGHASH_DEFAULT by default and signs
+    // nothing at all when the input asks for ALL, so a PSBT without it tests a
+    // reveal this app never builds.
+    sighashType: SigHash.ALL,
   });
   // The literal CNTRPRTY marker, which is what makes the reveal a counter.
   tx.addOutput({ script: hexToBytes("6a08434e545250525459"), amount: 0n });
@@ -75,8 +80,10 @@ describe("a reveal signed by the page", () => {
     const tx = RawTx.decode(hexToBytes(final.hex));
     const witness = tx.witnesses?.[0];
     expect(witness).toHaveLength(3);
-    // Schnorr signature, then the leaf verbatim, then the control block.
-    expect([64, 65]).toContain(witness![0]!.length);
+    // Schnorr signature with the SIGHASH_ALL flag byte — 65, not 64, which is
+    // the length Core's commit was funded for.
+    expect(witness![0]).toHaveLength(65);
+    expect(witness![0]![64]).toBe(SigHash.ALL);
     expect(bytesToHex(witness![1]!)).toBe(bytesToHex(leaf));
     expect(witness![2]).toHaveLength(33);
     expect(witness![2]![0]).toBe(commit.controlVersion);
