@@ -5,15 +5,25 @@
  * detection race, the MV3 idle-worker retries and the error codes. This file
  * only maps that surface onto the shared adapter.
  *
- * The one thing that has no Horizon equivalent is the inscription context. XCP
- * Wallet refuses to sign BTC movement it cannot account for, and its escape
- * hatch for a commit demands the BIP-341 NUMS internal key plus the signer's
- * own taproot output key in the leaf — which is exactly why the envelope is
- * re-keyed before signing. Without it a commit is simply rejected.
+ * The one thing that has no Horizon equivalent is how a commit is approved. XCP
+ * Wallet refuses to sign BTC movement it cannot account for, and it offers two
+ * ways to account for one:
+ *
+ *   - the **inscription context** — the BIP-341 NUMS internal key plus the
+ *     signer's own taproot output key in the leaf, which is exactly why the
+ *     envelope is re-keyed before signing. Its verifier is an ord-envelope
+ *     parser, so this door is open only for `counterparty + ord`.
+ *   - a **Bitcoin payment intent** — the address and exact satoshis of every
+ *     output that is not the signer's own change, declared before signing and
+ *     checked against the PSBT. Core's native envelope goes through here.
+ *
+ * They are mutually exclusive: the wallet rejects a request carrying both.
  */
 
 import { broadcastTransaction } from "@/lib/wallet/broadcast";
 import { XcpWallet, detectProvider, getProvider } from "@/lib/wallet/sdk";
+import { detectOrdEnvelope } from "@/lib/inscribe/psbt";
+import { hexToBytes } from "@/lib/inscribe/envelope";
 import {
   NotConnectedError,
   UserRejectedError,
@@ -104,6 +114,33 @@ export const xcpAdapter: WalletAdapter = {
     }
   },
 
+  /**
+   * The ord envelope goes through the inscription check, which proves the
+   * commit from the leaf; the native one, which that parser cannot read, goes
+   * through the payment check, which proves the output instead.
+   */
+  async signCommit(psbtHex, signInputs, commit) {
+    try {
+      const wallet = await sdk();
+      const ord = detectOrdEnvelope(hexToBytes(commit.revealScript));
+      if (ord) {
+        return await wallet.signPsbt(psbtHex, signInputs, undefined, {
+          revealScript: commit.revealScript,
+          tapInternalKey: commit.tapInternalKey,
+        });
+      }
+      return await wallet.signBitcoinPsbt(psbtHex, signInputs, {
+        standard: "xcp-wallet/bitcoin-payment",
+        version: 1,
+        action: "pay",
+        outputs: [{ address: commit.address, amountSats: commit.valueSats }],
+        description: `Inscription commit for ${commit.asset}`.slice(0, 120),
+      });
+    } catch (cause) {
+      throw translate(cause);
+    }
+  },
+
   async signPsbt(psbtHex, signInputs, inscription) {
     try {
       const wallet = await sdk();
@@ -134,8 +171,9 @@ export const xcpAdapter: WalletAdapter = {
   capabilities: {
     broadcasts: true,
     requiresInscriptionContext: true,
-    // Its `verifyInscriptionCommit` parses ord envelopes only.
-    ordEnvelopeOnly: true,
+    // Its `verifyInscriptionCommit` parses ord envelopes only; a native commit
+    // is proved as a declared payment instead.
+    verifiesOrdEnvelopeOnly: true,
     bip322: true,
   },
 };

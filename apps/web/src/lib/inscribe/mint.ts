@@ -306,16 +306,6 @@ export async function mintCounter(
     }
   }
 
-  // An envelope the wallet cannot read is refused here rather than at the
-  // signing dialog, which reports it as the transaction not being a
-  // Counterparty one at all. See `ordEnvelopeOnly` in the adapter contract.
-  if (wallet.capabilities.ordEnvelopeOnly && req.envelope !== "counterparty/ord") {
-    throw new Error(
-      `${wallet.name} can only sign an inscription commit in the counterparty + ord envelope; ` +
-        "the counterparty native one is unsignable there. Nothing was composed.",
-    );
-  }
-
   onStage?.("composing");
   const { compose, asset, lpAsset } = await composeMint(req);
   const fairminter = req.fairminter ? { ...req.fairminter, lpAsset } : undefined;
@@ -346,12 +336,6 @@ export async function mintCounter(
   // nothing has been signed.
   const wantOrd = req.envelope === "counterparty/ord";
   const isOrd = detectOrdEnvelope(hexToBytes(compose.envelope_script));
-  if (!isOrd && wallet.capabilities.ordEnvelopeOnly) {
-    throw new Error(
-      `Core built a counterparty native envelope, which ${wallet.name} cannot sign a commit for. ` +
-        "Nothing was signed.",
-    );
-  }
   if (isOrd !== wantOrd) {
     throw new Error(
       `Core built a ${isOrd ? "counterparty + ord" : "counterparty native"} envelope, not the ` +
@@ -370,16 +354,19 @@ export async function mintCounter(
   } = buildCommitPsbt(compose, commit.script, valueDelta);
 
   onStage?.("signing-commit");
-  // The inscription context is what gets XCP Wallet past its own gate on BTC
-  // moving for reasons the bytes cannot prove: it verifies that the internal
-  // key is NUMS and that the leaf's key is this signer's. Horizon Wallet needs
-  // no such context and its adapter drops it, so it is always passed.
-  const signedCommit = await wallet.signPsbt(
+  // How a commit gets past a wallet's gate on BTC moving for reasons the bytes
+  // cannot prove is the wallet's business, not this file's: the adapter is
+  // handed the envelope AND the output, and picks whichever its wallet can
+  // check. See `signCommit` in the adapter contract.
+  const signedCommit = await wallet.signCommit(
     commitPsbt,
     { [req.source]: compose.inputs_values.map((_, i) => i) },
     {
       revealScript: bytesToHex(commit.leaf),
       tapInternalKey: bytesToHex(commit.internalKey),
+      address: commit.address,
+      valueSats: commitValue,
+      asset,
     },
   );
   const commitFinal = finalize(signedCommit);

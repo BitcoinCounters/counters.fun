@@ -210,18 +210,72 @@ describe("the Esplora fallback Horizon depends on", () => {
     await expect(broadcastViaNode("deadbeef", `${CP}/v2`)).rejects.toThrow(/could not relay/i);
   });
 
+  /**
+   * The commit is the one transaction in a mint that carries no Counterparty
+   * message, and this wallet has two ways of being satisfied about that. Which
+   * one it can use is decided by the envelope, so the adapter picks — and
+   * picking wrong is the difference between a signed commit and "Blocked: Not
+   * a Counterparty Transaction".
+   */
+  it("proves an ord commit from the leaf and a native one from the payment", async () => {
+    const calls: { method: string; params: unknown }[] = [];
+    (globalThis as Record<string, unknown>).window = {
+      xcpwallet: {
+        request(args: { method: string; params?: unknown[] }) {
+          calls.push({ method: args.method, params: args.params?.[0] });
+          return Promise.resolve({ hex: "70736274ff00" });
+        },
+        on() {},
+        removeListener() {},
+      },
+    };
+    const { xcpAdapter } = await import("../apps/web/src/lib/wallet/adapters/xcp");
+
+    // `OP_FALSE OP_IF "ord" …` — its inscription verifier can read this one.
+    const ordLeaf = "0063036f726401070378637001010a746578742f706c61696e01050b86161a0d95873d00f5f4f4000e68656c6c6f20636f756e7465727368" + "20" + "7b".repeat(32) + "ac";
+    // Core's native envelope: data straight after OP_IF, and unreadable to it.
+    const nativeLeaf = "00632516871a0d95873d00f5f4f46a746578742f706c61696e4e68656c6c6f20636f756e7465727368" + "20" + "47".repeat(32) + "ac";
+    const commit = {
+      tapInternalKey: "50".repeat(32),
+      address: "bc1pcommit",
+      valueSats: 1753,
+      asset: "TESTBI",
+    };
+
+    await xcpAdapter.signCommit("70736274ff", { bc1ptap: [0] }, { ...commit, revealScript: ordLeaf });
+    const inscription = calls.pop()!;
+    expect(inscription.method).toBe("xcp_signPsbt");
+    expect((inscription.params as { inscription?: unknown }).inscription).toEqual({
+      revealScript: ordLeaf,
+      tapInternalKey: commit.tapInternalKey,
+    });
+    expect((inscription.params as { intent?: unknown }).intent).toBeUndefined();
+
+    await xcpAdapter.signCommit("70736274ff", { bc1ptap: [0] }, { ...commit, revealScript: nativeLeaf });
+    const payment = calls.pop()!;
+    expect(payment.method).toBe("xcp_signBitcoinPsbt");
+    const params = payment.params as { intent: Record<string, unknown>; inscription?: unknown };
+    // The wallet refuses an intent that arrives with an inscription context,
+    // and refuses the payment unless every external output matches to the sat.
+    expect(params.inscription).toBeUndefined();
+    expect(params.intent.standard).toBe("xcp-wallet/bitcoin-payment");
+    expect(params.intent.version).toBe(1);
+    expect(params.intent.action).toBe("pay");
+    expect(params.intent.outputs).toEqual([{ address: "bc1pcommit", amountSats: 1753 }]);
+    expect(String(params.intent.description)).toContain("TESTBI");
+  });
+
   it("declares the capabilities the mint flow branches on", async () => {
     const { xcpAdapter } = await import("../apps/web/src/lib/wallet/adapters/xcp");
     // It relays its own transactions, and it will not sign a commit without
     // the inscription context.
     expect(xcpAdapter.capabilities.broadcasts).toBe(true);
     expect(xcpAdapter.capabilities.requiresInscriptionContext).toBe(true);
-    // And that context is only read for an ord envelope, so the native one is
-    // not a smaller choice here — it is an unsignable commit.
-    expect(xcpAdapter.capabilities.ordEnvelopeOnly).toBe(true);
-    expect(xcpAdapter.detect()).toBe(false);
+    // And that context is only read for an ord envelope — which decides how
+    // much the wallet can prove, not whether the mint is possible.
+    expect(xcpAdapter.capabilities.verifiesOrdEnvelopeOnly).toBe(true);
 
     const { horizonAdapter } = await import("../apps/web/src/lib/wallet/adapters/horizon");
-    expect(horizonAdapter.capabilities.ordEnvelopeOnly).toBe(false);
+    expect(horizonAdapter.capabilities.verifiesOrdEnvelopeOnly).toBe(false);
   });
 });

@@ -40,6 +40,34 @@ export interface SignPsbtParams {
   inscription?: { revealScript: string; tapInternalKey: string }
 }
 
+/**
+ * A plain Bitcoin payment, declared so the wallet can prove it.
+ *
+ * The other door for a commit. `xcp_signBitcoinPsbt` signs a PSBT that carries
+ * no Counterparty message at all, but only against an intent it can check: the
+ * wallet compares every output that is not the signer's own change against
+ * `outputs`, address and amount, and refuses on any mismatch, on an OP_RETURN,
+ * or on an input carrying attached Counterparty assets.
+ */
+export interface BitcoinPaymentIntent {
+  standard: 'xcp-wallet/bitcoin-payment'
+  version: 1
+  action: 'pay'
+  /** 1-20 payments. Amounts are exact satoshis. */
+  outputs: { address: string; amountSats: number }[]
+  /** Shown in the dialog. At most 120 characters. */
+  description?: string
+  /** At most 160 characters. */
+  reference?: string
+}
+
+export interface SignBitcoinPsbtParams {
+  hex: string
+  signInputs?: Record<string, number[]>
+  sighashTypes?: number[]
+  intent: BitcoinPaymentIntent
+}
+
 /** One address the wallet controls, with the key that proves it. */
 export interface WalletAddress {
   address: string
