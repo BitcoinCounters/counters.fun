@@ -304,8 +304,8 @@ export const copy = {
       ordHint: "Numbered by ordinals indexers as well. About 39% of the index.",
       native: "counterparty native",
       nativeHint: "Counterparty's own envelope. Smaller by a few bytes.",
-      nativeUnsignable: (wallet: string) =>
-        `${wallet} cannot sign the reveal for this envelope — its parser reads ord envelopes only, and a taproot reveal carries no Counterparty message it can read any other way. It would sign the commit and then refuse the reveal, leaving the commit on chain for nothing. Use counterparty + ord here, or connect a wallet that signs either.`,
+      nativeSelfSigned: (wallet: string) =>
+        `${wallet} reads ord envelopes only, so it will not be asked to sign the reveal for this one: the envelope names a key made for this mint alone, ${wallet} approves the commit as the payment it is — exact address, exact amount — and this page signs the reveal with that key. The asset, the file and the counter are identical either way.`,
     },
     nonStandard:
       "Past the {{STANDARD_WITNESS_LIMIT_WU}} WU standard relay cap. The public network will not carry this reveal at any fee rate, so it goes straight to a miner through Slipstream — which is how the multi-megabyte counters were mined.",

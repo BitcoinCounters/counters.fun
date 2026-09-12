@@ -32,7 +32,7 @@
  *   - nothing but the user's key can ever spend the commit output.
  */
 
-import { p2tr, taprootNumsKey } from '@scure/btc-signer';
+import { p2tr, taprootNumsKey, utils as btcUtils } from '@scure/btc-signer';
 
 /** Push of a 32-byte x-only key, then OP_CHECKSIG — the last 34 bytes of every envelope leaf. */
 const KEY_SUFFIX_LEN = 34;
@@ -134,4 +134,40 @@ export function commitEnvelope(leaf: Uint8Array): CommitEnvelope {
     controlVersion,
     internalKey,
   };
+}
+
+/**
+ * A key for the leaf that belongs to nobody but this mint.
+ *
+ * The leaf's `OP_CHECKSIG` key decides who can open the commit, and there are
+ * two sensible answers. Naming the SIGNER's key is the better one — the wallet
+ * proves the commit from it, and the coins are always theirs — but it also
+ * means the reveal can only ever be signed by that wallet, and a wallet that
+ * will not read the envelope will not sign the reveal either.
+ *
+ * The other answer is the one every ordinals inscriber uses and the one
+ * Counterparty Core uses itself: a key made for this transaction and used for
+ * nothing else. The page holds it, so the page can sign the reveal without
+ * asking anyone, and the commit is then just a payment the wallet can approve
+ * as a payment. Core throws its copy away, which is why a Core reveal can
+ * never be re-signed; this one is kept with the pending mint until the reveal
+ * is on chain, so a failed broadcast is still recoverable.
+ *
+ * It guards one output, for minutes, and it is never sent anywhere.
+ */
+export interface RevealKey {
+  privateKey: Uint8Array;
+  /** x-only public key — what goes in the leaf. */
+  xOnly: Uint8Array;
+}
+
+export function newRevealKey(): RevealKey {
+  const privateKey = btcUtils.randomPrivateKeyBytes();
+  return { privateKey, xOnly: btcUtils.pubSchnorr(privateKey) };
+}
+
+export function revealKeyFromHex(hex: string): RevealKey {
+  const privateKey = hexToBytes(hex);
+  if (privateKey.length !== 32) throw new Error('a reveal key is 32 bytes');
+  return { privateKey, xOnly: btcUtils.pubSchnorr(privateKey) };
 }
