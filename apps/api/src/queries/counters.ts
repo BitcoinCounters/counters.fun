@@ -94,13 +94,46 @@ const COUNTER_COLUMNS = `
   c.rolling_hash, c.supply, c.divisible, c.locked, c.burned, c.fee,
   c.tx_size, c.body, c.block_time, c.launchpad`;
 
-export type PooledSort = "depth" | "volume" | "change" | "number" | "newest";
+export type PooledSort =
+  | "liquidity"
+  | "marketcap"
+  | "volume"
+  | "change"
+  | "number"
+  | "newest";
+
+/** The XCP side of the pair: reserve_b when XCP is asset_b, reserve_a when it
+ *  leads. CAST is safe here — pool reserves are well inside 2^63. */
+const XCP_SIDE = `CASE WHEN p.asset_b = 'XCP' THEN CAST(p.reserve_b AS INTEGER)
+                       ELSE CAST(p.reserve_a AS INTEGER) END`;
+
+/**
+ * Circulating supply in whole units. Raw is what the chain stores, and a
+ * divisible asset's raw unit is 1e-8 of a whole one — the same distinction
+ * `priceFromReserves` makes, and for the same reason: `price` is XCP per
+ * *whole* token, so anything multiplied by it has to be whole units too.
+ *
+ * MAX(0, …) because burned is subtracted, and a row that ever reported more
+ * burned than issued should sort at the bottom rather than flip the sign.
+ */
+const CIRCULATING = `MAX(0, CAST(c.supply AS INTEGER) - CAST(COALESCE(c.burned, '0') AS INTEGER))
+                     / (CASE WHEN c.divisible = 1 THEN 100000000.0 ELSE 1.0 END)`;
 
 const POOLED_ORDER: Record<PooledSort, string> = {
-  // Depth is the XCP side: reserve_b when XCP is asset_b, reserve_a when it
-  // leads. CAST is safe here — pool reserves are well inside 2^63.
-  depth: `CASE WHEN p.asset_b = 'XCP' THEN CAST(p.reserve_b AS INTEGER)
-               ELSE CAST(p.reserve_a AS INTEGER) END DESC`,
+  // Both sides of a constant-product pool are worth the same at the pool's
+  // own price, so the whole pool is exactly twice the XCP side — which means
+  // ordering by one side alone already orders by the whole, with no second
+  // reserve to convert and no price to multiply through.
+  //
+  // Not "total value locked": on this site "locked" is the LP-burn proof —
+  // tokens sent to the unspendable address — and the counter page puts a
+  // "liquidity locked" meter on exactly these pools. Two meanings of locked
+  // on one screen would be one too many.
+  liquidity: `${XCP_SIDE} DESC`,
+  // Price is XCP per whole token, so this is a market cap denominated in XCP.
+  // A pool with no price yet sorts last: SQLite puts NULL at the end of a
+  // DESC ordering.
+  marketcap: `(p.price * ${CIRCULATING}) DESC`,
   volume: `CAST(COALESCE(p.volume_24h, '0') AS INTEGER) DESC`,
   change: `CASE WHEN p.price_24h_ago IS NULL OR p.price_24h_ago = 0 THEN -1e18
                 ELSE (p.price - p.price_24h_ago) / p.price_24h_ago END DESC`,
@@ -111,7 +144,7 @@ const POOLED_ORDER: Record<PooledSort, string> = {
 /** Counters with a live XCP pool — the headline listing. */
 export function pooledCounters(
   db: D1Database,
-  sort: PooledSort = "depth",
+  sort: PooledSort = "liquidity",
   limit = 100,
 ): Promise<PooledCounterRow[]> {
   return q<PooledCounterRow>(

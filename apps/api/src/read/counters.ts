@@ -24,7 +24,14 @@ import { CountersServer } from "#api/upstream/counters-server";
 import { BURN_ADDRESS } from "@counters/core/counter";
 import { big } from "@counters/core/numeric";
 
-const SORTS = new Set<PooledSort>(["depth", "volume", "change", "number", "newest"]);
+const SORTS = new Set<PooledSort>([
+  "liquidity",
+  "marketcap",
+  "volume",
+  "change",
+  "number",
+  "newest",
+]);
 
 export function countersRoutes(): ReadApp {
   const app = router();
@@ -36,8 +43,8 @@ export function countersRoutes(): ReadApp {
    */
   app.get("/counters", async (c) => {
     const filter = c.req.query("filter") ?? "all";
-    const sortParam = c.req.query("sort") ?? "depth";
-    const sort = SORTS.has(sortParam as PooledSort) ? (sortParam as PooledSort) : "depth";
+    const sortParam = c.req.query("sort") ?? "liquidity";
+    const sort = SORTS.has(sortParam as PooledSort) ? (sortParam as PooledSort) : "liquidity";
     const limit = clamp(Number(c.req.query("limit") ?? 100), 1, 200);
     const before = c.req.query("before") ? Number(c.req.query("before")) : undefined;
 

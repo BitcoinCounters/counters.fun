@@ -76,6 +76,18 @@ export const copy = {
       empty: "No counter has an XCP pool yet. The first one is a",
       emptyLink: "deposit",
       emptyAfter: "away.",
+      /** Sort options, in the order they are offered. The keys are the API's
+       *  `sort` values, so these labels are the only place they are spelled
+       *  for a reader. Marketcap is denominated in XCP, like every price on
+       *  the site. */
+      sort: {
+        label: "sort",
+        options: [
+          { value: "liquidity", label: "liquidity" },
+          { value: "marketcap", label: "marketcap" },
+          { value: "newest", label: "newest" },
+        ] as const,
+      },
     },
     minting: {
       title: "Minting",

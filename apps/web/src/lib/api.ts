@@ -154,7 +154,7 @@ const NO_STATS: Stats = {
   synced_at: 0,
 };
 
-export const getHome = (sort = "depth") =>
+export const getHome = (sort = "liquidity") =>
   readOr<HomeData>(`/counters?sort=${encodeURIComponent(sort)}`, NO_COUNTERS);
 
 export const getStats = () => readOr<Stats>("/stats", NO_STATS);
