@@ -15,3 +15,25 @@ export async function register(): Promise<void> {
   const { startRunner } = await import("@/lib/server/reveal-jobs");
   startRunner();
 }
+
+/**
+ * Every error Next catches on the server — a thrown page render, a route
+ * handler that blew up — goes to the same local log as the browser's, so one
+ * `tail -f` covers a whole run. Development only; see lib/dev-errors.ts.
+ */
+export async function onRequestError(
+  error: unknown,
+  request: { path?: string },
+  context: { routerKind?: string; routePath?: string; renderSource?: string },
+): Promise<void> {
+  if (process.env.NEXT_RUNTIME !== "nodejs" || process.env.NODE_ENV === "production") return;
+  const { report } = await import("@/lib/dev-errors");
+  await report({
+    source: context.renderSource ? "route" : "server",
+    kind: error instanceof Error ? error.name : typeof error,
+    message: error instanceof Error ? error.message : String(error),
+    url: request.path,
+    stack: error instanceof Error ? error.stack : undefined,
+    detail: { routePath: context.routePath, routerKind: context.routerKind },
+  });
+}

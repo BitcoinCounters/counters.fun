@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { SiteHeader } from "@/components/site-header";
+import { DevErrorReporter } from "@/components/dev-error-reporter";
 import { FaviconAnimator } from "@/components/favicon-animator";
 import { AppProviders } from "@/providers/app-providers";
 import { copy } from "@content/copy";
@@ -56,6 +57,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body>
         <AppProviders>
+          {/* Local runs only: collects this tab's unhandled failures into
+              .logs/errors.log, where the server writes its own. */}
+          {process.env.NODE_ENV !== "production" && <DevErrorReporter />}
           <FaviconAnimator />
           <SiteHeader />
           <main className="mx-auto w-full max-w-[1120px] px-5 pb-24">{children}</main>
