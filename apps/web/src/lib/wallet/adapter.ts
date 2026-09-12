@@ -10,7 +10,7 @@
  * | call style | `request({method, params})` | `request(method, params)` |
  * | raw-tx signing | `xcp_signTransaction` | **none** — PSBT only |
  * | broadcast | `xcp_broadcastTransaction` | **none** — the dApp must relay |
- * | inscription commit | requires an `inscription` context or it refuses | signs it as an ordinary PSBT |
+ * | inscription commit | requires an `inscription` context, and can only read an ord envelope | signs it as an ordinary PSBT |
  * | message signing | BIP-322 | ECDSA / BIP-137 |
  *
  * Two consequences run through the whole app:
@@ -52,6 +52,22 @@ export interface WalletCapabilities {
   broadcasts: boolean;
   /** Requires an inscription context before it will sign a commit. */
   requiresInscriptionContext: boolean;
+  /**
+   * The wallet can only sign a commit whose envelope is the **ord** style.
+   *
+   * Not a preference — its inscription verifier is an ord-envelope parser. It
+   * requires the leaf to open `OP_FALSE OP_IF "ord"`, reads the metaprotocol
+   * (tag 7), the MIME type (tag 1) and the Counterparty message out of ord's
+   * CBOR metadata (tag 5), and returns nothing for anything else. Core's own
+   * native envelope goes straight to its data after `OP_IF`, so the parser
+   * refuses it at the third opcode, and the refusal surfaces as the blanket
+   * "Blocked: Not a Counterparty Transaction" — a commit carries no
+   * Counterparty message of its own to fall back on.
+   *
+   * So for such a wallet `counterparty native` is not a smaller envelope, it
+   * is an unsignable one, and the form offers only `counterparty + ord`.
+   */
+  ordEnvelopeOnly: boolean;
   /** Proves address ownership on connect (BIP-322). Horizon signs BIP-137 instead. */
   bip322: boolean;
 }

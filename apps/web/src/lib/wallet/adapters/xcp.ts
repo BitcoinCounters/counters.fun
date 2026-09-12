@@ -134,6 +134,8 @@ export const xcpAdapter: WalletAdapter = {
   capabilities: {
     broadcasts: true,
     requiresInscriptionContext: true,
+    // Its `verifyInscriptionCommit` parses ord envelopes only.
+    ordEnvelopeOnly: true,
     bip322: true,
   },
 };

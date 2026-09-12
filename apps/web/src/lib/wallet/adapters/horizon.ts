@@ -190,6 +190,8 @@ export const horizonAdapter: WalletAdapter = {
   capabilities: {
     broadcasts: false,
     requiresInscriptionContext: false,
+    // No inscription gate, so either envelope signs.
+    ordEnvelopeOnly: false,
     bip322: false,
   },
 };
