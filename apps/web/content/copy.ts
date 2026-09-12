@@ -68,7 +68,7 @@ export const copy = {
     /** Labels the listings as a whole, above the first section's heading.
      *  Names the premise rather than a category: everything below this line
      *  is a file that is actually in a Bitcoin block. */
-    listingsEyebrow: "onchain assets",
+    listingsEyebrow: "fully onchain assets",
 
     pooled: {
       title: "Pooled",
