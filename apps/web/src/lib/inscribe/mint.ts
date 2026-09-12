@@ -306,6 +306,16 @@ export async function mintCounter(
     }
   }
 
+  // An envelope the wallet cannot read is refused here rather than at the
+  // signing dialog, which reports it as the transaction not being a
+  // Counterparty one at all. See `ordEnvelopeOnly` in the adapter contract.
+  if (wallet.capabilities.ordEnvelopeOnly && req.envelope !== "counterparty/ord") {
+    throw new Error(
+      `${wallet.name} can only sign an inscription commit in the counterparty + ord envelope; ` +
+        "the counterparty native one is unsignable there. Nothing was composed.",
+    );
+  }
+
   onStage?.("composing");
   const { compose, asset, lpAsset } = await composeMint(req);
   const fairminter = req.fairminter ? { ...req.fairminter, lpAsset } : undefined;
@@ -336,6 +346,12 @@ export async function mintCounter(
   // nothing has been signed.
   const wantOrd = req.envelope === "counterparty/ord";
   const isOrd = detectOrdEnvelope(hexToBytes(compose.envelope_script));
+  if (!isOrd && wallet.capabilities.ordEnvelopeOnly) {
+    throw new Error(
+      `Core built a counterparty native envelope, which ${wallet.name} cannot sign a commit for. ` +
+        "Nothing was signed.",
+    );
+  }
   if (isOrd !== wantOrd) {
     throw new Error(
       `Core built a ${isOrd ? "counterparty + ord" : "counterparty native"} envelope, not the ` +

@@ -296,6 +296,8 @@ export const copy = {
       ordHint: "Numbered by ordinals indexers as well. About 39% of the index.",
       native: "counterparty native",
       nativeHint: "Counterparty's own envelope. Smaller by a few bytes.",
+      nativeUnsignable: (wallet: string) =>
+        `${wallet} can only sign a commit whose envelope is the ord one — its inscription check is an ord-envelope parser, and it reads anything else as not a Counterparty transaction at all.`,
     },
     nonStandard:
       "Past the {{STANDARD_WITNESS_LIMIT_WU}} WU standard relay cap. The public network will not carry this reveal at any fee rate, so it goes straight to a miner through Slipstream — which is how the multi-megabyte counters were mined.",

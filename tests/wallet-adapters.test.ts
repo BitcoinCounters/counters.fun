@@ -216,6 +216,12 @@ describe("the Esplora fallback Horizon depends on", () => {
     // the inscription context.
     expect(xcpAdapter.capabilities.broadcasts).toBe(true);
     expect(xcpAdapter.capabilities.requiresInscriptionContext).toBe(true);
+    // And that context is only read for an ord envelope, so the native one is
+    // not a smaller choice here — it is an unsignable commit.
+    expect(xcpAdapter.capabilities.ordEnvelopeOnly).toBe(true);
     expect(xcpAdapter.detect()).toBe(false);
+
+    const { horizonAdapter } = await import("../apps/web/src/lib/wallet/adapters/horizon");
+    expect(horizonAdapter.capabilities.ordEnvelopeOnly).toBe(false);
   });
 });

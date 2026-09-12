@@ -336,6 +336,15 @@ export function MintForm() {
     };
   }, [route]);
 
+  // XCP Wallet's inscription verifier is an ord-envelope parser, so with it
+  // connected the native envelope is not a choice — it is a commit the wallet
+  // will refuse. Switch off it rather than let someone pick it and find out at
+  // the signing dialog.
+  const ordOnly = wallet.adapter?.capabilities.ordEnvelopeOnly ?? false;
+  useEffect(() => {
+    if (ordOnly) setEnvelope("counterparty/ord");
+  }, [ordOnly]);
+
   const walletError = requiresTaproot(wallet.account);
   const ready =
     wallet.address !== null &&
@@ -612,7 +621,13 @@ export function MintForm() {
 
       <Well label={copy.mint.envelope.label}>
         <div className="flex flex-col gap-2">
-          <Choice label={copy.mint.envelope.native} hint={copy.mint.envelope.nativeHint} active={envelope === "counterparty"} onClick={() => setEnvelope("counterparty")} />
+          <Choice
+            label={copy.mint.envelope.native}
+            hint={ordOnly ? copy.mint.envelope.nativeUnsignable(wallet.adapter?.name ?? "") : copy.mint.envelope.nativeHint}
+            active={envelope === "counterparty"}
+            disabled={ordOnly}
+            onClick={() => !ordOnly && setEnvelope("counterparty")}
+          />
           <Choice label={copy.mint.envelope.ord} hint={copy.mint.envelope.ordHint} active={envelope === "counterparty/ord"} onClick={() => setEnvelope("counterparty/ord")} />
         </div>
         <div className="mt-4 border-t border-line2 pt-3">
@@ -1033,11 +1048,14 @@ function Toggle({ label, value, onChange }: { label: string; value: boolean; onC
   );
 }
 
-function Choice({ label, hint, active, onClick }: { label: string; hint: string; active: boolean; onClick: () => void }) {
+function Choice({ label, hint, active, disabled = false, onClick }: { label: string; hint: string; active: boolean; disabled?: boolean; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className={`rounded-xl border p-3 text-left transition-colors ${active ? "border-copper bg-copper-ghost" : "border-line hover:border-line2"}`}
+      disabled={disabled}
+      className={`rounded-xl border p-3 text-left transition-colors ${active ? "border-copper bg-copper-ghost" : "border-line hover:border-line2"} ${
+        disabled ? "cursor-not-allowed opacity-45 hover:border-line" : ""
+      }`}
     >
       <div className={`font-mono text-xs ${active ? "text-copper2" : "text-dim"}`}>{label}</div>
       <div className="mt-0.5 text-[11px] text-faint">{hint}</div>
