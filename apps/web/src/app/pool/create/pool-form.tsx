@@ -21,7 +21,7 @@ import {
   type ComposedTx,
 } from "@/lib/pool-compose";
 import { fetchAsset, fetchAssetFairminters, type AssetInfo } from "@/lib/cp";
-import { describeError, isCancellation } from "@/lib/errors";
+import { describeError, isCancellation, reportHandled } from "@/lib/errors";
 import { ConnectInline } from "@/components/connect-inline";
 import { FeeRateField, useFeeRate } from "@/components/fee-rate";
 import { copy } from "@content/copy";
@@ -261,6 +261,7 @@ export function PoolForm({ initialAsset }: { initialAsset: string }) {
   );
 
   const fail = useCallback((err: unknown) => {
+    reportHandled("pool", err);
     setError(isCancellation(err) ? { message: copy.errors.cancelled(), detail: null } : describeError(err));
   }, []);
 

@@ -1,6 +1,9 @@
 import type { XcpProvider, XcpWalletEvents, SignPsbtParams, SignBitcoinPsbtParams, BitcoinPaymentIntent, ConnectionProof, ConnectResult, WalletAddresses } from './types'
 import { BTC_ADDRESS_REGEX, HEX_REGEX, TXID_REGEX, DISCONNECTED } from './constants'
 
+/** The only sighash a plain Bitcoin payment may carry. */
+const SIGHASH_ALL = 1
+
 /** Per-method timeouts: interactive methods get longer, passive methods are short. */
 const Timeout = {
   fast: 10_000,        // getAccounts, disconnect — should resolve near-instantly
@@ -173,11 +176,18 @@ export class XcpWallet {
    */
   async signBitcoinPsbt(
     psbtHex: string,
-    signInputs: Record<string, number[]> | undefined,
+    signInputs: Record<string, number[]>,
     intent: BitcoinPaymentIntent,
   ): Promise<string> {
-    const params: SignBitcoinPsbtParams = { hex: psbtHex, intent }
-    if (signInputs) params.signInputs = signInputs
+    // This door is stricter than the inscription one, and silently so: the
+    // wallet requires BOTH an explicit `signInputs` and an explicit
+    // `sighashTypes` of SIGHASH_ALL, refuses anything else in it, and throws a
+    // plain Error for each — which its content script rewrites to the
+    // uninformative "Request failed" before the page ever sees it. The array is
+    // indexed by input index, so it is filled to cover every index asked for.
+    const indices = Object.values(signInputs).flat()
+    const sighashTypes = new Array<number>(Math.max(0, ...indices) + 1).fill(SIGHASH_ALL)
+    const params: SignBitcoinPsbtParams = { hex: psbtHex, intent, signInputs, sighashTypes }
     const result = await this.durableRequest({
       method: 'xcp_signBitcoinPsbt',
       params: [params],

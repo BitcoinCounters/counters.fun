@@ -5,7 +5,7 @@ import { useWallet } from "@/lib/wallet/wallet-context";
 import { big, parseUnitsToRaw } from "@counters/core/numeric";
 import { inputForOutput, orientPool, type Pool } from "@counters/core/pool";
 import { cpCompose, cpGet, fetchBalance } from "@/lib/cp";
-import { describeError, isCancellation } from "@/lib/errors";
+import { describeError, isCancellation, reportHandled } from "@/lib/errors";
 import { withSlippage, rawToUnits } from "@/lib/pool-compose";
 import { buildPlainPsbt, finalize } from "@/lib/inscribe/psbt";
 import { FeeRateField, useFeeRate } from "@/components/fee-rate";
@@ -206,6 +206,7 @@ export function SwapPanel({ asset, divisible }: { asset: string; divisible: bool
       setTxid(sent || final.txid);
       setConfirming(false);
     } catch (err) {
+      reportHandled("swap", err);
       setError(isCancellation(err) ? { message: copy.errors.cancelled(), detail: null } : describeError(err));
     } finally {
       setBusy(false);
