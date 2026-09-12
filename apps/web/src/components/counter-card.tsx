@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { sizeBadge } from "@counters/core/counter";
+import { circulatingSupply, sizeBadge } from "@counters/core/counter";
+import { marketCap } from "@counters/core/pool";
 import type { CounterRow, MintingCounter, PooledCounter } from "@/lib/api";
 import { fmtBlocks, fmtCompact, fmtPct, fmtPrice, fmtSize, mimeTag, pctChange } from "@/lib/format";
 import { CounterContent } from "@/components/counter-content";
@@ -74,8 +75,15 @@ function Shell({
 /** A counter with a live XCP pool. */
 export function PooledCard({ counter }: { counter: PooledCounter }) {
   const change = pctChange(counter.price, counter.price_24h_ago);
-  // Depth is the XCP side of the pair — how much real liquidity is behind it.
-  const depth = counter.asset_b === "XCP" ? counter.reserve_b : counter.reserve_a;
+  // The XCP side of the pair — how much real liquidity is behind it. Both
+  // sides are worth the same at the pool's own price, so this is half the
+  // pool and the honest half to quote: it is the side you are paid in.
+  const liquidity = counter.asset_b === "XCP" ? counter.reserve_b : counter.reserve_a;
+  const mcap = marketCap(
+    counter.price,
+    circulatingSupply(counter.supply ?? 0, counter.burned),
+    counter.divisible !== 0,
+  );
 
   return (
     <Shell counter={counter}>
@@ -92,8 +100,16 @@ export function PooledCard({ counter }: { counter: PooledCounter }) {
         </span>
       </div>
       <div className="flex items-baseline justify-between gap-2">
-        <span className="font-mono text-[10px] uppercase tracking-wider text-faint">depth</span>
-        <span className="font-mono text-[11px] text-ink">{fmtCompact(depth)} XCP</span>
+        <span className="font-mono text-[10px] uppercase tracking-wider text-faint">liquidity</span>
+        <span className="font-mono text-[11px] text-ink">{fmtCompact(liquidity)} XCP</span>
+      </div>
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="font-mono text-[10px] uppercase tracking-wider text-faint">marketcap</span>
+        {/* Back to raw so both rows go through the same formatter and line up
+            in the same units; marketCap returns whole XCP. */}
+        <span className="font-mono text-[11px] text-ink">
+          {mcap === null ? "—" : `${fmtCompact(Math.round(mcap * 1e8))} XCP`}
+        </span>
       </div>
     </Shell>
   );

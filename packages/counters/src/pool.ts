@@ -169,6 +169,38 @@ export function priceFromReserves(tokenReserve: bigint, xcpReserve: bigint, toke
   return Number((xcpReserve * tokenUnit * SCALE) / (tokenReserve * 100_000_000n)) / 1e12;
 }
 
+/**
+ * Market cap in XCP: the pool's price times what is actually in circulation.
+ *
+ * Carries the same divisibility trap `priceFromReserves` documents just
+ * above. `price` is XCP per *whole* token, so the supply it multiplies has to
+ * be whole too, and a divisible asset's raw unit is 1e-8 of one. Getting it
+ * wrong does not error — it values a divisible counter 1e8 too high.
+ *
+ * The conversion to Number is deliberate and happens before the division. A
+ * raw supply can exceed 2^53 — LORDFUN's 9,990,000,000,000,000 already does —
+ * so the result is not exact to the last raw unit, but a double still carries
+ * ~16 significant figures, which is far more than a market cap is ever quoted
+ * to. Dividing as bigint first would be exact in the wrong place: it would
+ * truncate whole units off a small divisible supply, which is a real error
+ * rather than a rounding one.
+ *
+ * Null rather than 0 when there is no price or nothing circulating — an
+ * unknown market cap is not a zero one, and the listing sorts it last either
+ * way. The ORDER BY in `apps/api/src/queries/counters.ts` is this same
+ * formula in SQL; it has to be, because ordering happens in SQLite.
+ */
+export function marketCap(
+  price: number | null,
+  circulating: bigint,
+  tokenDivisible: boolean,
+): number | null {
+  if (price === null || !Number.isFinite(price) || price <= 0) return null;
+  if (circulating <= 0n) return null;
+  const tokenUnit = tokenDivisible ? 1e8 : 1;
+  return (price * Number(circulating)) / tokenUnit;
+}
+
 /** Order a pair the way the API addresses it, with XCP as the quote side. */
 export function pairFor(asset: string): { asset1: string; asset2: string } {
   return { asset1: asset, asset2: "XCP" };
