@@ -39,8 +39,6 @@ export const copy = {
         `${asset} trades at ${price} XCP with ${liquidity} XCP of liquidity. ${size} of ${mime}, in Bitcoin witness data.`,
       unpooled: (asset: string, size: string, mime: string, block: string) =>
         `${asset} — ${size} of ${mime} in Bitcoin witness data, block ${block}. No XCP pool yet.`,
-      pointer: (asset: string) =>
-        `${asset} is a counter whose description is a URL, not a file. counters.fun does not fetch it.`,
       imageAlt: (number: number, asset: string) => `Counter #${number} — ${asset}`,
     },
   },
@@ -137,17 +135,6 @@ export const copy = {
       title: "Reinscriptions",
       meta: (count: number) => `${count} on this asset`,
       body: "One asset can carry many counters. Each reinscription earns its own permanent number; the lowest is the original. Nothing is renumbered, ever.",
-    },
-
-    /** The refusal state for a counter whose description is a URL. */
-    pointer: {
-      label: "off-chain pointer",
-      body: (number: number) =>
-        `Counter #${number} is real, numbered and permanent. Its description is not a file — it is an address somewhere else, so there is nothing in Bitcoin to show you.`,
-      inscribedLabel: "what was inscribed",
-      footerBefore: "counters.fun does not fetch it. Most of the index's counters are pointers like this one; the",
-      footerLink: "ones that are files",
-      footerAfter: "are what this site is for.",
     },
   },
 

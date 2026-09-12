@@ -31,8 +31,11 @@ The rule is structural, not a setting:
 - `tests/on-chain-rule.test.ts` asserts the split across the whole live index;
 - `scripts/smoke.mjs` re-checks it after every deploy.
 
-A deep link to a pointer counter is not a 404. It renders an honest refusal
-showing the raw description as text, deliberately not as a link.
+A deep link to a pointer counter is a 404. The counter is real and the
+reference explorer has a page for it; this is the market layer, and nothing
+here will ever trade it, so there is no page to serve. The content proxy
+still answers `415` rather than `404` — the bytes exist, they are just not
+on Bitcoin, and that is a different statement to a caller.
 
 ## Layout
 
