@@ -4,14 +4,31 @@ import { SiteHeader } from "@/components/site-header";
 import { FaviconAnimator } from "@/components/favicon-animator";
 import { AppProviders } from "@/providers/app-providers";
 import { copy } from "@content/copy";
+import { SITE_URL } from "@/lib/constants";
 
 export const metadata: Metadata = {
+  // Every og:image below is written as a site-relative path; a crawler cannot
+  // resolve one, so Next needs a base to make them absolute. Without it the
+  // image tag is emitted relative and chat clients silently show no preview,
+  // which is what counters.fun did until now.
+  metadataBase: new URL(SITE_URL),
   title: copy.site.title,
   description: copy.site.description,
   openGraph: {
     title: copy.site.ogTitle,
     description: copy.site.ogDescription,
     type: "website",
+    url: SITE_URL,
+    siteName: copy.site.title,
+    images: [{ url: "/og.png", width: 1200, height: 630, alt: copy.site.ogImageAlt }],
+  },
+  twitter: {
+    // The whole point of a preview is the picture; `summary` crops it to a
+    // thumbnail beside the text.
+    card: "summary_large_image",
+    title: copy.site.ogTitle,
+    description: copy.site.ogDescription,
+    images: [{ url: "/og.png", alt: copy.site.ogImageAlt }],
   },
   // The FUN wordmark. The SVG's gradient slides (SMIL); see FaviconAnimator
   // for browsers that rasterise favicons once.
