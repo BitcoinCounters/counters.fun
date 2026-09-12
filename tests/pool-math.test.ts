@@ -16,7 +16,9 @@ import {
   poolPrice,
   proportionalCounterpart,
   withdrawalShares,
+  marketCap,
 } from "../packages/counters/src/pool";
+import { circulatingSupply } from "../packages/counters/src/counter";
 import { big } from "../packages/counters/src/numeric";
 
 const CP = process.env.COUNTERPARTY_API_BASE ?? "http://127.0.0.1:4000";
@@ -135,5 +137,68 @@ describe("swap input for a wanted output", () => {
     expect(Number(input) / 1e8).toBeGreaterThan(0.9999);
     expect(Number(input) / 1e8).toBeLessThan(1.0002);
     expect(inputForOutput(reserveOut, reserveIn, reserveOut, 50)).toBeNull();
+  });
+});
+
+/**
+ * Market cap, against the five counters that had pools on 2026-09-11.
+ *
+ * The numbers are the ones the listing ranks by, so they are written out
+ * rather than recomputed from the same formula the code uses — a test that
+ * restates the implementation only proves it is self-consistent.
+ */
+describe("market cap", () => {
+  const cases = [
+    // asset, price (XCP per whole token), supply raw, burned raw, divisible, XCP
+    ["LORDFUN", 1.565667e-5, "9995000000000000", "5000000000000", true, 1564.101],
+    ["MEMENOME", 8.439408e-6, "10000000000000000", "0", true, 843.9408],
+    ["MEMEPOW", 20.0, "20", "0", false, 400],
+    ["BONPARTY", 0.2, "1779", "221", false, 311.6],
+    ["SIDEEYE", 4.451864218666, "30", "0", false, 133.5559],
+  ] as const;
+
+  it("prices circulating supply in XCP", () => {
+    for (const [asset, price, supply, burned, divisible, expected] of cases) {
+      const mc = marketCap(price, circulatingSupply(supply, burned), divisible);
+      expect(mc, asset).not.toBeNull();
+      expect(mc!, asset).toBeCloseTo(expected, 3);
+    }
+  });
+
+  it("ranks them the way the listing does", () => {
+    const ranked = [...cases]
+      .map(([asset, price, supply, burned, divisible]) => ({
+        asset,
+        mc: marketCap(price, circulatingSupply(supply, burned), divisible)!,
+      }))
+      .sort((a, b) => b.mc - a.mc)
+      .map((r) => r.asset);
+
+    expect(ranked).toEqual(["LORDFUN", "MEMENOME", "MEMEPOW", "BONPARTY", "SIDEEYE"]);
+  });
+
+  it("does not value a divisible counter 1e8 too high", () => {
+    // The whole trap in one assertion: the same raw supply, read both ways.
+    // BONPARTY's 1,558 indivisible units are 1,558 tokens; read as divisible
+    // they would be 0.00001558 of one.
+    const raw = circulatingSupply("1779", "221");
+    expect(marketCap(0.2, raw, false)!).toBeCloseTo(311.6, 6);
+    expect(marketCap(0.2, raw, true)!).toBeCloseTo(311.6 / 1e8, 14);
+  });
+
+  it("keeps full precision past 2^53", () => {
+    // 9,990,000,000,000,000 raw is already above Number.MAX_SAFE_INTEGER, so
+    // a naive Number() conversion would quietly round the supply.
+    const raw = circulatingSupply("9995000000000000", "5000000000000");
+    expect(raw > BigInt(Number.MAX_SAFE_INTEGER)).toBe(true);
+    expect(marketCap(1e-8, raw, true)!).toBeCloseTo(0.999, 9);
+  });
+
+  it("is null when there is no price or nothing circulating", () => {
+    expect(marketCap(null, 100n, false)).toBeNull();
+    expect(marketCap(0, 100n, false)).toBeNull();
+    expect(marketCap(1, 0n, false)).toBeNull();
+    // Burned everything: circulating clamps at zero rather than going negative.
+    expect(marketCap(1, circulatingSupply("100", "100"), false)).toBeNull();
   });
 });
