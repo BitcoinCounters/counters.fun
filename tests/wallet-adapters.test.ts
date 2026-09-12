@@ -254,10 +254,22 @@ describe("the Esplora fallback Horizon depends on", () => {
     await xcpAdapter.signCommit("70736274ff", { bc1ptap: [0] }, { ...commit, revealScript: nativeLeaf });
     const payment = calls.pop()!;
     expect(payment.method).toBe("xcp_signBitcoinPsbt");
-    const params = payment.params as { intent: Record<string, unknown>; inscription?: unknown };
+    const params = payment.params as {
+      intent: Record<string, unknown>;
+      inscription?: unknown;
+      signInputs?: Record<string, number[]>;
+      sighashTypes?: number[];
+    };
     // The wallet refuses an intent that arrives with an inscription context,
     // and refuses the payment unless every external output matches to the sat.
     expect(params.inscription).toBeUndefined();
+    // Its plain-payment door demands both of these explicitly and rejects a
+    // request missing either — as a plain Error, which its content script
+    // rewrites to "Request failed" before the page can read it. That is what
+    // a mint failed with until the sighash array was sent.
+    expect(params.signInputs).toEqual({ bc1ptap: [0] });
+    expect(params.sighashTypes).toEqual([1]);
+    expect(params.sighashTypes?.every((t) => t === 1)).toBe(true);
     expect(params.intent.standard).toBe("xcp-wallet/bitcoin-payment");
     expect(params.intent.version).toBe(1);
     expect(params.intent.action).toBe("pay");

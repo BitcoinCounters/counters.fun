@@ -57,3 +57,36 @@ export function isCancellation(cause: unknown): boolean {
   const raw = cause instanceof Error ? cause.message : String(cause);
   return /user (rejected|denied|cancel)/i.test(raw);
 }
+
+/**
+ * Tell the local error log about a failure the UI is handling.
+ *
+ * The window listeners in `DevErrorReporter` see only what nothing caught,
+ * and a mint that fails is caught by definition: the form shows the sentence
+ * and carries on. So the log — and anyone tailing it — saw a working page
+ * while the person in front of it was reading "Request failed". Every form
+ * that puts an error on screen reports it here first.
+ *
+ * Development only; the route it posts to does not exist in a production
+ * build. Never throws and never awaits anything the caller depends on.
+ */
+export function reportHandled(kind: string, cause: unknown, detail?: Record<string, unknown>): void {
+  if (process.env.NODE_ENV === "production" || typeof window === "undefined") return;
+  const raw = cause instanceof Error ? cause.message : String(cause);
+  try {
+    void fetch("/api/dev-errors", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        kind: `handled ${kind}`,
+        message: detail ? `${raw} · ${JSON.stringify(detail)}` : raw,
+        url: window.location.pathname,
+        stack: cause instanceof Error ? cause.stack : undefined,
+      }),
+      keepalive: true,
+    }).catch(() => {});
+  } catch {
+    // The log is a convenience; it never gets in the way of the failure it
+    // is describing.
+  }
+}

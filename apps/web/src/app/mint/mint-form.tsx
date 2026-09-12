@@ -34,7 +34,7 @@ import { XCP69, XCP69_DEFAULT_START_LEAD, XCP69_MIN_START_LEAD, xcp69Params, xcp
 import { fairminterProblems, type FairminterParams } from "@counters/core/fairminter";
 import { parseUnitsToRaw } from "@counters/core/numeric";
 import { fetchAsset, fetchBalance, fetchBtcFunds, fetchOwnedAssets, fetchTip, type AssetInfo, type BtcFunds, type OwnedAsset } from "@/lib/cp";
-import { describeError, isCancellation } from "@/lib/errors";
+import { describeError, isCancellation, reportHandled } from "@/lib/errors";
 import { clearPendingMint, loadPendingMint, savePendingMint, type PendingMint } from "@/lib/pending-mint";
 
 /**
@@ -435,6 +435,7 @@ export function MintForm() {
       setPending(null);
       setResult(mint);
     } catch (err) {
+      reportHandled("mint", err, { mode, envelope, route, asset: asset.trim() || "(drawn)", stage });
       if (err instanceof RevealPendingError) {
         setError({ message: err.message, detail: describeError(err.cause).message });
       } else if (err instanceof NonStandardRevealError || err instanceof OversizedRevealError || err instanceof BelowSlipstreamFloorError) {
@@ -459,6 +460,7 @@ export function MintForm() {
       setResult({ ...pending.plan, revealTxid: reveal.txid, revealHex: reveal.hex, revealWeight: reveal.weight, commitBroadcast: pending.commitTxid, revealBroadcast: reveal.txid });
       setPending(null);
     } catch (err) {
+      reportHandled("reveal resume", err, { asset: pending.asset, commit: pending.commitTxid });
       setError(isCancellation(err) ? { message: copy.errors.cancelled(), detail: null } : describeError(err));
     } finally {
       setStage(null);
@@ -828,6 +830,7 @@ function Receipt({ result, wantLock, satPerVbyte, slipstream }: { result: MintRe
       setLockTxid(txid);
       setLockState("done");
     } catch (err) {
+      reportHandled("description lock", err, { asset: result.asset });
       setLockError(describeError(err).message);
       setLockState("ready");
     }
