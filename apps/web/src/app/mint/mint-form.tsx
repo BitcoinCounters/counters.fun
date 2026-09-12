@@ -506,6 +506,14 @@ export function MintForm() {
       </Well>
 
       <Well label={copy.mint.asset.label}>
+        {/* In reinscribe mode the list comes first: the asset already exists,
+            so choosing it from what this address owns is the ordinary path and
+            typing the name is the fallback. */}
+        {mode === "reinscribe" && (
+          <div className="mb-4 border-b border-line2 pb-3">
+            <OwnedPicker owned={owned} selected={asset} connected={wallet.address !== null} onPick={setAsset} />
+          </div>
+        )}
         <Row label="name">
           <input
             value={asset}
@@ -535,7 +543,6 @@ export function MintForm() {
         )}
         {mode === "reinscribe" && (
           <div className="mt-4 flex flex-col gap-2 border-t border-line2 pt-3">
-            {wallet.address && <OwnedPicker owned={owned} selected={asset} onPick={setAsset} />}
             <Toggle label={copy.mint.lockDescription.label} value={lockDesc} onChange={setLockDesc} />
             {lockDesc && <p className="text-[11px] text-faint">{copy.mint.lockDescription.hint}</p>}
           </div>
@@ -914,9 +921,10 @@ function FileDrop({ file, bytes, onFile }: { file: File | null; bytes: Uint8Arra
  * still minting, an asset that moved — is the name field's business, since a
  * typed name has to answer for the same things.
  */
-function OwnedPicker({ owned, selected, onPick }: { owned: OwnedAsset[] | null | "error"; selected: string; onPick: (asset: string) => void }) {
+function OwnedPicker({ owned, selected, connected, onPick }: { owned: OwnedAsset[] | null | "error"; selected: string; connected: boolean; onPick: (asset: string) => void }) {
   const c = copy.mint.asset.owned;
 
+  if (!connected) return <p className="text-[11px] text-faint">{c.connect}</p>;
   if (owned === null) return <p className="text-[11px] text-faint">{c.loading}</p>;
   if (owned === "error") return <p className="text-[11px] text-faint">{c.failed}</p>;
   if (owned.length === 0) return <p className="text-[11px] text-faint">{c.empty}</p>;
