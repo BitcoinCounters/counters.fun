@@ -254,8 +254,27 @@ export function MintForm() {
     return null;
   }, [asset, existing, isMine, lookup.state, mode, nameCheck]);
 
-  const burnXcp = nameKind === "named" ? issuanceBurnXcp("named") : 0;
+  // The name is paid for once, at the first issuance. A reinscription is a
+  // reissuance of a name that is already yours, so it burns nothing.
+  const burnXcp = mode !== "reinscribe" && nameKind === "named" ? issuanceBurnXcp("named") : 0;
   const xcpShort = burnXcp > 0 && typeof xcpBalance === "bigint" && xcpBalance < BigInt(Math.round(burnXcp * 1e8));
+
+  /**
+   * The line under the name field: what this name means in this mode. A
+   * reinscription has nothing to say about the name itself — it is either an
+   * asset of yours, and only its description changes, or `assetError` already
+   * says why it cannot be one.
+   */
+  const assetHint = useMemo<string | null>(() => {
+    if (lookup.state === "checking") return copy.mint.asset.checking;
+    if (mode === "reinscribe") {
+      return existing && isMine && !existing.description_locked ? copy.mint.asset.reinscribeReady(existing.mime_type ?? null) : null;
+    }
+    if (!asset) return copy.mint.asset.numericAuto;
+    if (nameKind === "named") return copy.mint.asset.named(burnXcp);
+    if (nameKind === "subasset" && nameCheck?.ok) return copy.mint.asset.subasset(nameCheck.parent ?? "");
+    return copy.mint.asset.numeric;
+  }, [asset, burnXcp, existing, isMine, lookup.state, mode, nameCheck, nameKind]);
 
   const schedule = useMemo(() => {
     if (mode !== "fairminter" || tip === null) return null;
@@ -472,19 +491,7 @@ export function MintForm() {
             className="w-72 rounded-lg border border-line bg-bg2 px-2 py-1 text-right font-mono text-xs text-ink outline-none placeholder:text-faint focus:border-copper"
           />
         </Row>
-        <p className="mt-1.5 text-[11px] text-faint">
-          {lookup.state === "checking"
-            ? copy.mint.asset.checking
-            : mode === "reinscribe" && existing && isMine && !existing.description_locked
-              ? copy.mint.asset.reinscribeReady(existing.mime_type ?? null)
-              : !asset
-                ? copy.mint.asset.numericAuto
-                : nameKind === "named"
-                  ? copy.mint.asset.named(burnXcp)
-                  : nameKind === "subasset" && nameCheck?.ok
-                    ? copy.mint.asset.subasset(nameCheck.parent ?? "")
-                    : copy.mint.asset.numeric}
-        </p>
+        {assetHint && <p className="mt-1.5 text-[11px] text-faint">{assetHint}</p>}
         {assetError && <p className="mt-1.5 text-[11px] text-bad">{assetError}</p>}
 
         {mode === "counter" && (
