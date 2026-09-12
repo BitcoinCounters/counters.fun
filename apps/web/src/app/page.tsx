@@ -4,6 +4,7 @@ import { MintingCard, PooledCard, UnpooledCard, totalDepth } from "@/components/
 import { fmtCompact, fmtSize } from "@/lib/format";
 import { PriceTicker } from "@/components/price-ticker";
 import { SearchBox } from "@/components/search-box";
+import { SortSelect } from "@/components/sort-select";
 import { copy } from "@content/copy";
 
 export const revalidate = 30;
@@ -18,8 +19,20 @@ export const revalidate = 30;
  * it are where the first section comes from — launches on their way to a
  * consensus-seeded pool, and on-chain counters one deposit away from one.
  */
-export default async function HomePage() {
-  const [home, stats] = await Promise.all([getHome(), getStats()]);
+const SORTS = copy.home.pooled.sort.options;
+const DEFAULT_SORT = SORTS[0].value;
+
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ sort?: string }>;
+}) {
+  // Anything unrecognised falls back rather than 404s: ?sort= is a thing
+  // people edit by hand, and the listing is still correct under the default.
+  const { sort: requested } = await searchParams;
+  const sort = SORTS.some((o) => o.value === requested) ? requested! : DEFAULT_SORT;
+
+  const [home, stats] = await Promise.all([getHome(sort), getStats()]);
 
   return (
     <>
@@ -45,6 +58,15 @@ export default async function HomePage() {
       <Section
         eyebrow={copy.home.listingsEyebrow}
         title={copy.home.pooled.title}
+        control={
+          home.pooled.length > 1 ? (
+            <SortSelect
+              options={SORTS}
+              value={sort}
+              label={copy.home.pooled.sort.label}
+            />
+          ) : undefined
+        }
         meta={
           home.pooled.length > 0
             ? copy.home.pooled.meta(fmtCompact(totalDepth(home.pooled)))
@@ -102,6 +124,7 @@ function Section({
   title,
   meta,
   eyebrow,
+  control,
   children,
 }: {
   title: string;
@@ -110,6 +133,8 @@ function Section({
    *  passed to the first section only, and sits in its header's top margin
    *  rather than opening a band of its own. */
   eyebrow?: string;
+  /** A control for this section's listing, right-aligned before the meta. */
+  control?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -120,9 +145,13 @@ function Section({
             {eyebrow}
           </p>
         )}
-        <div className="flex items-baseline gap-3.5">
+        {/* items-center rather than items-baseline once a control is in the
+            row: a bordered box has no baseline worth aligning to, and hanging
+            it off the heading's would sit it low. */}
+        <div className="flex flex-wrap items-center gap-x-3.5 gap-y-2">
           <h2 className="font-mono text-sm font-semibold uppercase tracking-[0.14em]">{title}</h2>
-          <span className="h-px flex-1 bg-line" />
+          <span className="hidden h-px flex-1 bg-line sm:block" />
+          {control}
           {meta && <span className="font-mono text-xs text-faint">{meta}</span>}
         </div>
       </div>
