@@ -43,6 +43,7 @@ export default async function HomePage() {
       </div>
 
       <Section
+        eyebrow={copy.home.listingsEyebrow}
         title={copy.home.pooled.title}
         meta={
           home.pooled.length > 0
@@ -100,18 +101,30 @@ export default async function HomePage() {
 function Section({
   title,
   meta,
+  eyebrow,
   children,
 }: {
   title: string;
   meta?: string;
+  /** Labels the run of sections that follows, not just this one — so it is
+   *  passed to the first section only, and sits in its header's top margin
+   *  rather than opening a band of its own. */
+  eyebrow?: string;
   children: React.ReactNode;
 }) {
   return (
     <section>
-      <div className="mb-4 mt-12 flex items-baseline gap-3.5">
-        <h2 className="font-mono text-sm font-semibold uppercase tracking-[0.14em]">{title}</h2>
-        <span className="h-px flex-1 bg-line" />
-        {meta && <span className="font-mono text-xs text-faint">{meta}</span>}
+      <div className="mb-4 mt-12">
+        {eyebrow && (
+          <p className="mb-3 font-mono text-xs uppercase tracking-[0.22em] text-copper">
+            {eyebrow}
+          </p>
+        )}
+        <div className="flex items-baseline gap-3.5">
+          <h2 className="font-mono text-sm font-semibold uppercase tracking-[0.14em]">{title}</h2>
+          <span className="h-px flex-1 bg-line" />
+          {meta && <span className="font-mono text-xs text-faint">{meta}</span>}
+        </div>
       </div>
       {children}
     </section>
