@@ -39,7 +39,7 @@ import {
   unsignedRevealTxid,
 } from "./psbt";
 import { STANDARD_WITNESS_LIMIT_WU } from "@/lib/constants";
-import { cpCompose } from "@/lib/cp";
+import { cpCompose, fetchAsset, type AssetInfo } from "@/lib/cp";
 import { randomNumericAsset } from "@counters/core/assetnames";
 import { HARD_MIN_RATE } from "@counters/core/fees";
 import { MAX_WEIGHT, meetsFloor, routeFor } from "@counters/core/slipstream";
@@ -107,9 +107,15 @@ export interface MintRequest {
   body: Uint8Array;
   /** MIME committed to by the envelope — it cannot be corrected later. */
   mimeType: string;
-  /** Raw units. 0 issues the asset with no supply, which is still a counter. Ignored for xcp69. */
+  /**
+   * `counter` only. Raw units; 0 issues the asset with no supply, which is
+   * still a counter. A fairminter takes its supply from `fairminter`, and a
+   * reinscription takes it from the asset — see {@link supplyParams}.
+   */
   quantity: bigint;
+  /** `counter` only. A reinscription copies the asset's own divisibility. */
   divisible: boolean;
+  /** `counter` only. A reinscription never touches the supply lock. */
   lockQuantity: boolean;
   satPerVbyte: number;
   envelope: EnvelopeStyle;
@@ -216,16 +222,45 @@ async function composeMint(req: MintRequest): Promise<{ compose: ComposeResult; 
     return { compose, asset, lpAsset };
   }
 
+  // A reinscription is composed against the asset as it already is, so the
+  // asset has to be read first.
+  const existing = req.mode === "reinscribe" ? await fetchAsset(asset) : null;
+
   const compose = await cpCompose(req.source, "issuance", {
     asset,
-    // A reinscription changes only the description: quantity 0 leaves the
-    // supply exactly where it is.
-    quantity: req.mode === "reinscribe" ? "0" : req.quantity.toString(),
-    divisible: String(req.divisible),
-    lock: String(req.lockQuantity),
+    ...supplyParams(req, existing),
     ...common,
   });
   return { compose, asset };
+}
+
+/**
+ * What an issuance says about supply — and, for a reinscription, why none of
+ * it comes from the form.
+ *
+ * Counterparty reads a reinscription as a *reissuance*, and a reissuance may
+ * not change the asset: `divisible` has to equal what the asset already is or
+ * Core refuses the compose with `cannot change divisibility`, and `lock` is
+ * the supply lock, which is permanent. Leaving them out is not an option
+ * either — Core defaults a missing `divisible` to **true** and would fail the
+ * same way on an indivisible asset.
+ *
+ * So a reinscription sends quantity 0, the asset's own divisibility, and no
+ * new lock: the description is the only thing that changes. The form does not
+ * show supply fields in this mode, and this makes sure whatever they happen to
+ * hold cannot reach the wire — including the supply lock, which defaults to on
+ * and would otherwise freeze the asset's supply forever as a side effect of
+ * putting a new file on it.
+ */
+export function supplyParams(
+  req: Pick<MintRequest, "mode" | "quantity" | "divisible" | "lockQuantity">,
+  existing: Pick<AssetInfo, "divisible"> | null,
+): Record<string, string> {
+  if (req.mode !== "reinscribe") {
+    return { quantity: req.quantity.toString(), divisible: String(req.divisible), lock: String(req.lockQuantity) };
+  }
+  if (!existing) throw new Error("A reinscription needs an asset that already exists.");
+  return { quantity: "0", divisible: String(existing.divisible), lock: "false" };
 }
 
 /**
