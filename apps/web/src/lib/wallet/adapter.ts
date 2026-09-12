@@ -70,7 +70,7 @@ export interface WalletCapabilities {
   /** Requires an inscription context before it will sign a commit. */
   requiresInscriptionContext: boolean;
   /**
-   * The wallet can only complete a mint in the **ord** envelope, both legs.
+   * The wallet will only ever *read* an **ord** envelope.
    *
    * Its envelope parser is an ord parser: the leaf must open
    * `OP_FALSE OP_IF "ord"`, with the metaprotocol (tag 7), the MIME type
@@ -87,10 +87,12 @@ export interface WalletCapabilities {
    *     purpose; so its only other route is the envelope parser. And the
    *     payment door refuses a transaction with a data output.
    *
-   * So a native mint on such a wallet signs its commit and then cannot sign
-   * the reveal — the worst outcome available, since the commit is on chain by
-   * then and the coins sit in an envelope nothing can open. The mint refuses
-   * the combination before composing anything.
+   * Asking it to sign a native reveal therefore signs the commit and strands
+   * it. So the mint does not ask: for that combination the envelope leaf names
+   * a key of its own and the page signs the reveal (`newRevealKey`), leaving
+   * the wallet only the commit, which it can prove as a payment. The flag says
+   * which wallets need that, not which envelopes can be minted — both can, on
+   * either wallet.
    */
   signsOrdEnvelopeOnly: boolean;
   /** Proves address ownership on connect (BIP-322). Horizon signs BIP-137 instead. */

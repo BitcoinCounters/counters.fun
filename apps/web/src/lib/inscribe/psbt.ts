@@ -299,6 +299,33 @@ export function finalize(signedPsbtHex: string): { hex: string; txid: string; we
 }
 
 /**
+ * Sign the reveal here, with the key the leaf names.
+ *
+ * Used when the leaf carries a key of this mint's own rather than the wallet's
+ * (see `newRevealKey`): the reveal is a script-path spend, and whoever holds
+ * that key can produce the signature — no wallet, no dialog, nothing to
+ * approve. It is the same spend the wallet would have made.
+ */
+export function signRevealLocally(revealPsbt: string, privateKey: Uint8Array): string {
+  const tx = Transaction.fromPSBT(hexToBytes(revealPsbt), {
+    allowUnknownInputs: true,
+    allowUnknownOutputs: true,
+    allowLegacyWitnessUtxo: true,
+  });
+  // A key that does not appear in the leaf is a mismatch either way: scure
+  // throws ("No taproot scripts signed") where another version might return
+  // false. Both mean the same thing, and neither says it usefully.
+  let signed = false;
+  try {
+    signed = tx.signIdx(privateKey, 0);
+  } catch (cause) {
+    throw new Error("The reveal key does not match the envelope it is meant to open.", { cause });
+  }
+  if (!signed) throw new Error("The reveal key does not match the envelope it is meant to open.");
+  return bytesToHex(tx.toPSBT());
+}
+
+/**
  * The txid the reveal will have once signed.
  *
  * A taproot script-path spend commits to nothing in the txid but its inputs

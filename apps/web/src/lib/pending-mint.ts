@@ -4,9 +4,15 @@
  *
  * The reveal PSBT used to live only in React state, so closing the tab after
  * the commit broadcast stranded the commit's coins with nothing to rebuild
- * from. Everything needed to finish is small and safe to store: the PSBT
- * names the person's own key, so it is worthless to anyone else, and there
- * is one pending mint per address at a time.
+ * from. Everything needed to finish is small and safe to store, and there is
+ * one pending mint per address at a time.
+ *
+ * `revealKey` is the exception to "safe to store", and it is deliberate. When
+ * the leaf names a key of the mint's own rather than the wallet's, that key is
+ * the only thing that can open the commit — dropping it would strand the coins
+ * exactly as Core's discarded key does. It is a fresh key that has never held
+ * anything else, it guards one output worth the reveal's fee, and it is
+ * cleared the moment the reveal is broadcast. It is never sent anywhere.
  */
 
 import type { MintPlan } from "@/lib/inscribe/mint";
@@ -18,6 +24,8 @@ export interface PendingMint {
   asset: string;
   commitTxid: string;
   revealPsbt: string;
+  /** Hex, when the reveal is signed by this page rather than by the wallet. */
+  revealKey?: string;
   plan: MintPlan;
   savedAt: number;
 }

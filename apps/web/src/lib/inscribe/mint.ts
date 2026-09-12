@@ -26,7 +26,7 @@
  */
 
 import { RawTx, Transaction } from "@scure/btc-signer";
-import { commitEnvelope, bytesToHex, hexToBytes, reKeyEnvelope } from "./envelope";
+import { commitEnvelope, bytesToHex, hexToBytes, newRevealKey, reKeyEnvelope, revealKeyFromHex } from "./envelope";
 import { encodeContent } from "./content";
 import {
   type ComposeResult,
@@ -36,6 +36,7 @@ import {
   detectOrdEnvelope,
   commitTopUp,
   finalize,
+  signRevealLocally,
   unsignedRevealTxid,
 } from "./psbt";
 import { STANDARD_WITNESS_LIMIT_WU } from "@/lib/constants";
@@ -291,7 +292,7 @@ export async function mintCounter(
   wallet: SigningWallet,
   req: MintRequest,
   onStage?: (stage: MintStage) => void,
-  onRevealPsbt?: (psbt: string, plan: MintPlan) => void | Promise<void>,
+  onRevealPsbt?: (psbt: string, plan: MintPlan, revealKey?: string) => void | Promise<void>,
 ): Promise<MintResult> {
   // Slipstream's ACCEPTANCE floor, checked before composing because the commit
   // output is sized here for the reveal's fee and cannot be resized once the
@@ -304,18 +305,6 @@ export async function mintCounter(
     if (rates && !meetsFloor(req.satPerVbyte, rates)) {
       throw new BelowSlipstreamFloorError(req.satPerVbyte, rates.submitFloor, rates.mineable);
     }
-  }
-
-  // Refused here, before a commit exists. A wallet that cannot read this
-  // envelope will sign the commit — a commit is only a payment, and it has a
-  // door for that — and then refuse the reveal, which has no door at all. The
-  // coins would already be on chain by then. See `signsOrdEnvelopeOnly`.
-  if (wallet.capabilities.signsOrdEnvelopeOnly && req.envelope !== "counterparty/ord") {
-    throw new Error(
-      `${wallet.name} cannot sign the reveal for a counterparty native envelope, and a mint that ` +
-        "stops there leaves the commit on chain. Choose the counterparty + ord envelope, or " +
-        "connect a wallet that signs either. Nothing was composed.",
-    );
   }
 
   onStage?.("composing");
@@ -355,7 +344,25 @@ export async function mintCounter(
     );
   }
 
-  const leaf = reKeyEnvelope(hexToBytes(compose.envelope_script), req.sourceXOnly);
+  /**
+   * Whose key opens the commit.
+   *
+   * The signer's, normally: the wallet then proves the commit from the leaf
+   * and signs both halves, which is the most the wallet can verify and the
+   * least this page has to hold.
+   *
+   * But a wallet whose parser reads only ord envelopes cannot sign a native
+   * reveal at all — it recognises a Counterparty transaction by decrypting the
+   * OP_RETURN, and a taproot reveal's marker is literal, so the envelope is
+   * its only other route. Asking it anyway signs the commit and strands it.
+   * So for that combination the leaf names a key of this mint's own: the
+   * wallet approves the commit as the payment it is, and the reveal is signed
+   * here, by the page, with nothing to refuse. The envelope is Core's either
+   * way — this changes who can open it, not what it says.
+   */
+  const selfSigned = wallet.capabilities.signsOrdEnvelopeOnly && !isOrd;
+  const revealKey = selfSigned ? newRevealKey() : null;
+  const leaf = reKeyEnvelope(hexToBytes(compose.envelope_script), revealKey?.xOnly ?? req.sourceXOnly);
   const commit = commitEnvelope(leaf);
   const valueDelta = commitTopUp(compose, req.satPerVbyte);
 
@@ -412,14 +419,14 @@ export async function mintCounter(
   // Hand the reveal PSBT out before any money moves. If the caller writes it
   // somewhere durable, a mint is never unrecoverable — the leaf names the
   // user's key, so this PSBT can be re-signed at any point in the future.
-  await onRevealPsbt?.(revealPsbt, plan);
+  await onRevealPsbt?.(revealPsbt, plan, revealKey ? bytesToHex(revealKey.privateKey) : undefined);
 
   onStage?.("broadcasting-commit");
   const commitTxid = await wallet.broadcast(commitFinal.hex);
 
   onStage?.("signing-reveal");
   try {
-    const reveal = await finishReveal(wallet, req.source, revealPsbt, onStage, req.route, asset);
+    const reveal = await finishReveal(wallet, req.source, revealPsbt, onStage, req.route, asset, revealKey?.privateKey);
     onStage?.("done");
     return {
       ...plan,
@@ -455,11 +462,14 @@ export async function finishReveal(
   route: RevealRoute = "public",
   /** Only for the server-side job's record, so a pending mint is identifiable. */
   asset = "",
+  /** Set when the leaf names this mint's own key; then no wallet is involved. */
+  revealKey?: Uint8Array | string,
 ): Promise<{ txid: string; hex: string; weight: number }> {
-  // The reveal is a taproot script-path spend: the wallet signs input 0 against
-  // the tapleaf that names its own key. Both wallets handle `tapLeafScript` —
-  // it is the reason the envelope was re-keyed in the first place.
-  const signed = await wallet.signPsbt(revealPsbt, { [source]: [0] });
+  // The reveal is a taproot script-path spend against the tapleaf, signed by
+  // whoever the leaf names: the page when the key is this mint's own, and
+  // otherwise the wallet, which handles `tapLeafScript` in both cases.
+  const key = typeof revealKey === "string" ? revealKeyFromHex(revealKey).privateKey : revealKey;
+  const signed = key ? signRevealLocally(revealPsbt, key) : await wallet.signPsbt(revealPsbt, { [source]: [0] });
   const final = finalize(signed);
 
   if (route === "slipstream") {
