@@ -84,7 +84,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     const scan = () => {
       if (cancelled) return;
-      setInstalled({ xcp: xcpAdapter.detect(), horizon: horizonAdapter.detect() });
+      // Same object when the answer has not changed: this state is a
+      // dependency, and five fresh objects over two seconds would re-run
+      // everything that watches it five times for no news.
+      setInstalled((prev) => {
+        const next = { xcp: xcpAdapter.detect(), horizon: horizonAdapter.detect() };
+        return prev.xcp === next.xcp && prev.horizon === next.horizon ? prev : next;
+      });
     };
     scan();
     const timers = [100, 400, 1000, 2000].map((ms) => setTimeout(scan, ms));
@@ -97,6 +103,17 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   // Reconnect silently to the wallet last used, if this origin is still
   // approved there. Never prompts.
   const restored = useRef(false);
+  // Set on mount, not merely initialised: React remounts a component in
+  // development, and a ref that is only ever cleared stays cleared through the
+  // second mount — which would discard every restore instead of the stale one.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
   useEffect(() => {
     if (restored.current) return;
     const remembered = typeof localStorage === "undefined" ? null : localStorage.getItem(REMEMBERED);
@@ -104,22 +121,24 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
     const found = ADAPTERS.find((a) => a.id === remembered);
     if (!found || !found.detect()) return;
-    restored.current = true;
 
-    let cancelled = false;
     found
       .silentAccount()
       .then((acct) => {
-        if (cancelled || !acct) return;
+        // Only unmounting may discard this. The guard used to be per-run, and
+        // the roster above re-ran this effect while the wallet was still
+        // answering: the account arrived, was dropped as stale, and the ref
+        // said the restore had already happened — so a connected wallet
+        // rendered as "connect", every time the extension took longer to
+        // answer than the gap between two detection passes.
+        if (!mounted.current || !acct) return;
+        restored.current = true;
         setAdapter(found);
         setAccount(acct);
       })
       .catch(() => {
         // A wallet that will not answer silently is simply not connected.
       });
-    return () => {
-      cancelled = true;
-    };
   }, [installed]);
 
   const connect = useCallback(async (id: WalletId) => {

@@ -357,6 +357,30 @@ export function MintForm() {
     stage === null &&
     !result;
 
+  /**
+   * Why the button is doing nothing.
+   *
+   * A disabled call to action with no explanation reads as a broken page — the
+   * reason is usually on screen somewhere, but it is in the card that owns it,
+   * a scroll away from the button it is holding. This repeats it where the
+   * click happens, in the order the mint checks them.
+   */
+  const blocker = useMemo<string | null>(() => {
+    if (!wallet.address) return copy.mint.blocked.wallet;
+    if (walletError) return walletError;
+    if (!bytes) return copy.mint.blocked.file;
+    if (assetError) return assetError;
+    if (lookup.state === "checking") return copy.mint.blocked.checking;
+    if (mode === "reinscribe" && !(lookup.state === "done" && isMine)) return copy.mint.asset.reinscribeNeedsExisting;
+    if (mode === "fairminter" && (fairminter === null || fairminter.problems.length > 0)) {
+      return fairminter?.problems[0] ?? copy.mint.blocked.sale;
+    }
+    if (xcpShort && typeof xcpBalance === "bigint") return copy.mint.preflight.xcpShort(String(burnXcp), fmtQty(xcpBalance, true));
+    if (!fee.ok) return copy.mint.blocked.fee;
+    if (belowFloor && typeof rates === "object" && rates !== null) return copy.mint.route.belowFloor(formatFeeRate(rates.submitFloor));
+    return null;
+  }, [assetError, belowFloor, burnXcp, bytes, fairminter, fee.ok, isMine, lookup.state, mode, rates, walletError, wallet.address, xcpBalance, xcpShort]);
+
   /* ---------------- actions ---------------- */
 
   const run = useCallback(async () => {
@@ -731,13 +755,16 @@ export function MintForm() {
       )}
 
       {wallet.address ? (
-        <button
-          disabled={!ready}
-          onClick={run}
-          className="rounded-xl border border-copper bg-copper-ghost px-5 py-3 font-mono text-xs uppercase tracking-[0.12em] text-copper2 transition-colors enabled:hover:bg-copper enabled:hover:text-bg disabled:cursor-not-allowed disabled:border-line disabled:bg-transparent disabled:text-faint"
-        >
-          {stage ? STAGE_COPY[stage] : walletError ? copy.mint.ctaTaproot : modeCta}
-        </button>
+        <div className="flex flex-col gap-2">
+          <button
+            disabled={!ready}
+            onClick={run}
+            className="rounded-xl border border-copper bg-copper-ghost px-5 py-3 font-mono text-xs uppercase tracking-[0.12em] text-copper2 transition-colors enabled:hover:bg-copper enabled:hover:text-bg disabled:cursor-not-allowed disabled:border-dashed disabled:border-line2 disabled:bg-transparent disabled:text-dim"
+          >
+            {stage ? STAGE_COPY[stage] : walletError ? copy.mint.ctaTaproot : modeCta}
+          </button>
+          {!ready && stage === null && blocker && <p className="text-[11px] leading-relaxed text-gold">{blocker}</p>}
+        </div>
       ) : (
         <ConnectInline />
       )}

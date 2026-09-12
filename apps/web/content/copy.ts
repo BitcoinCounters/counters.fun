@@ -262,6 +262,14 @@ export const copy = {
       listed:
         "Any conforming launch is indexed by xcp.fun without being submitted. It appears in their Minting list once it has at least one mint.",
     },
+    /** Why the button will not do anything yet — said next to the button. */
+    blocked: {
+      file: "Choose the file this counter carries.",
+      sale: "The sale cannot be composed yet — see the parameters above.",
+      fee: "Set a fee rate this node will relay.",
+      checking: "Still checking the name…",
+      wallet: "Connect a wallet to mint.",
+    },
     preflight: {
       label: "before you sign",
       xcpShort: (need: string, have: string) => `Needs ${need} XCP to burn for the name; this address holds ${have}.`,
