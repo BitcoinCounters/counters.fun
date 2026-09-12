@@ -336,14 +336,11 @@ export function MintForm() {
     };
   }, [route]);
 
-  // XCP Wallet's inscription verifier is an ord-envelope parser, so with it
-  // connected the native envelope is not a choice — it is a commit the wallet
-  // will refuse. Switch off it rather than let someone pick it and find out at
-  // the signing dialog.
-  const ordOnly = wallet.adapter?.capabilities.ordEnvelopeOnly ?? false;
-  useEffect(() => {
-    if (ordOnly) setEnvelope("counterparty/ord");
-  }, [ordOnly]);
+  // Both envelopes mint. What changes with an XCP Wallet is how much it can
+  // check for itself before it signs the commit — its inscription verifier
+  // reads ord envelopes only — so say which of its two dialogs this choice
+  // leads to rather than making the choice for anyone.
+  const commitAsPayment = (wallet.adapter?.capabilities.verifiesOrdEnvelopeOnly ?? false) && envelope === "counterparty";
 
   const walletError = requiresTaproot(wallet.account);
   const ready =
@@ -621,15 +618,14 @@ export function MintForm() {
 
       <Well label={copy.mint.envelope.label}>
         <div className="flex flex-col gap-2">
-          <Choice
-            label={copy.mint.envelope.native}
-            hint={ordOnly ? copy.mint.envelope.nativeUnsignable(wallet.adapter?.name ?? "") : copy.mint.envelope.nativeHint}
-            active={envelope === "counterparty"}
-            disabled={ordOnly}
-            onClick={() => !ordOnly && setEnvelope("counterparty")}
-          />
+          <Choice label={copy.mint.envelope.native} hint={copy.mint.envelope.nativeHint} active={envelope === "counterparty"} onClick={() => setEnvelope("counterparty")} />
           <Choice label={copy.mint.envelope.ord} hint={copy.mint.envelope.ordHint} active={envelope === "counterparty/ord"} onClick={() => setEnvelope("counterparty/ord")} />
         </div>
+        {commitAsPayment && (
+          <p className="mt-2 text-[11px] leading-relaxed text-faint">
+            {copy.mint.envelope.nativeAsPayment(wallet.adapter?.name ?? "")}
+          </p>
+        )}
         <div className="mt-4 border-t border-line2 pt-3">
           <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.16em] text-faint">{copy.mint.route.label}</div>
           <div className="flex flex-col gap-2">

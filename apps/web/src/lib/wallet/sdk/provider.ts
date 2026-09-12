@@ -1,4 +1,4 @@
-import type { XcpProvider, XcpWalletEvents, SignPsbtParams, ConnectionProof, ConnectResult, WalletAddresses } from './types'
+import type { XcpProvider, XcpWalletEvents, SignPsbtParams, SignBitcoinPsbtParams, BitcoinPaymentIntent, ConnectionProof, ConnectResult, WalletAddresses } from './types'
 import { BTC_ADDRESS_REGEX, HEX_REGEX, TXID_REGEX, DISCONNECTED } from './constants'
 
 /** Per-method timeouts: interactive methods get longer, passive methods are short. */
@@ -158,6 +158,28 @@ export class XcpWallet {
     if (inscription) params.inscription = inscription
     const result = await this.durableRequest({
       method: 'xcp_signPsbt',
+      params: [params],
+    }, Timeout.interactive)
+    const signed = unwrap(result, 'hex', 'Wallet returned invalid PSBT response')
+    if (!HEX_REGEX.test(signed)) throw new Error('Wallet returned invalid hex')
+    return signed
+  }
+
+  /**
+   * Sign a PSBT the wallet treats as a plain Bitcoin payment, proved against
+   * `intent` rather than against a Counterparty message. The two are mutually
+   * exclusive: the wallet refuses an intent that arrives with an inscription
+   * context.
+   */
+  async signBitcoinPsbt(
+    psbtHex: string,
+    signInputs: Record<string, number[]> | undefined,
+    intent: BitcoinPaymentIntent,
+  ): Promise<string> {
+    const params: SignBitcoinPsbtParams = { hex: psbtHex, intent }
+    if (signInputs) params.signInputs = signInputs
+    const result = await this.durableRequest({
+      method: 'xcp_signBitcoinPsbt',
       params: [params],
     }, Timeout.interactive)
     const signed = unwrap(result, 'hex', 'Wallet returned invalid PSBT response')

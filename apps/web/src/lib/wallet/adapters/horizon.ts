@@ -164,6 +164,11 @@ export const horizonAdapter: WalletAdapter = {
     }
   },
 
+  /** No gate on a commit: it is an ordinary PSBT to this wallet. */
+  async signCommit(psbtHex, signInputs) {
+    return horizonAdapter.signPsbt(psbtHex, signInputs);
+  },
+
   async signPsbt(psbtHex, signInputs, _inscription?: InscriptionContext) {
     // Horizon needs no inscription context — it signs a commit as an ordinary
     // PSBT. The parameter is accepted so callers do not have to branch, and
@@ -190,8 +195,8 @@ export const horizonAdapter: WalletAdapter = {
   capabilities: {
     broadcasts: false,
     requiresInscriptionContext: false,
-    // No inscription gate, so either envelope signs.
-    ordEnvelopeOnly: false,
+    // No inscription gate at all, so nothing about the envelope reaches it.
+    verifiesOrdEnvelopeOnly: false,
     bip322: false,
   },
 };
