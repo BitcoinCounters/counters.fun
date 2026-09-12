@@ -20,7 +20,8 @@
     "start:web": "npm run start --workspace apps/web -- --port 3010",
     "build:web": "npm run build --workspace apps/web",
     "local": "node scripts/local.mjs",
-    "sync": "curl -s 'http://127.0.0.1:8787/cdn-cgi/handler/scheduled' && echo ' synced'"
+    "sync": "curl -s 'http://127.0.0.1:8787/cdn-cgi/handler/scheduled' && echo ' synced'",
+    "watch:errors": "node scripts/watch-errors.mjs"
   },
   "devDependencies": {
     "vitest": "4.1.11"
