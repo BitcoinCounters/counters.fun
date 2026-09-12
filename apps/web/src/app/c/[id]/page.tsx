@@ -1,6 +1,9 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { renderMode } from "@counters/core/counter";
 import { getCounter, getPool, isDisplayable } from "@/lib/api";
+import { copy } from "@content/copy";
 import { CounterContent } from "@/components/counter-content";
 import { SwapPanel } from "@/components/swap-panel";
 import { LaunchpadTag } from "@/components/launchpad-tag";
@@ -19,13 +22,119 @@ import {
 import {
   BURN_ADDRESS,
   XCP_POOL_FEE_BPS,
+  SITE_URL,
+  contentUrl,
   countersExplorerUrl,
   mempoolBlockUrl,
   mempoolTxUrl,
+  stampUrl,
 } from "@/lib/constants";
 import { big } from "@counters/core/numeric";
 
 export const revalidate = 30;
+
+/**
+ * What a shared link to this counter looks like in a chat client.
+ *
+ * The picture is the counter's own bytes wherever they can be one. That is
+ * the site's whole claim made visible in a place people actually look: the
+ * image in the preview is served from `/content` or `/stamp`, which is to say
+ * out of a Bitcoin block, not from a render farm that made a card about it.
+ *
+ * `renderMode` decides, rather than a second list of MIME types here. It
+ * already knows which counters are a raster image and which are a program,
+ * and its `image` and `stamp` modes are exactly the ones a crawler can
+ * display — HTML, JavaScript, SVG and PDF counters have no still frame to
+ * offer, so they fall back to the site card. SVG is in that group on purpose:
+ * it renders as markup, and no crawler will take it as og:image.
+ */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  const counter = await getCounter(id).catch(() => null);
+  if (!counter) return {};
+
+  const title = copy.site.counter.title(counter.number, counter.asset);
+  const alt = copy.site.counter.imageAlt(counter.number, counter.asset);
+
+  if (!isDisplayable(counter)) {
+    // The site card rather than nothing: a preview with no image at all reads
+    // as a broken link, and this counter is neither broken nor absent — it is
+    // real, numbered, and deliberately not rendered.
+    const pointer = copy.site.counter.pointer(counter.asset);
+    return {
+      title,
+      description: pointer,
+      openGraph: {
+        title,
+        description: pointer,
+        type: "article",
+        url: `${SITE_URL}/c/${counter.number}`,
+        siteName: copy.site.title,
+        images: [{ url: "/og.png", alt: copy.site.ogImageAlt }],
+      },
+      twitter: {
+        card: "summary_large_image",
+        title,
+        description: pointer,
+        images: [{ url: "/og.png", alt: copy.site.ogImageAlt }],
+      },
+    };
+  }
+
+  const mode = renderMode({
+    is_pointer_like: counter.is_pointer_like === 1,
+    size: counter.size,
+    content_type: counter.content_type,
+    stamp_mime: counter.stamp_mime,
+  });
+  const image =
+    mode === "stamp"
+      ? stampUrl(counter.number)
+      : mode === "image"
+        ? contentUrl(counter.number)
+        : "/og.png";
+  const ownArt = image !== "/og.png";
+
+  const description = counter.pool
+    ? copy.site.counter.pooled(
+        counter.asset,
+        fmtPrice(counter.pool.price),
+        fmtCompact(
+          counter.pool.asset_b === "XCP" ? counter.pool.reserve_b : counter.pool.reserve_a,
+        ),
+        fmtSize(counter.size),
+        shortMime(counter.content_type),
+      )
+    : copy.site.counter.unpooled(
+        counter.asset,
+        fmtSize(counter.size),
+        shortMime(counter.content_type),
+        counter.block.toLocaleString("en-US"),
+      );
+
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      type: "article",
+      url: `${SITE_URL}/c/${counter.number}`,
+      siteName: copy.site.title,
+      images: [{ url: image, alt: ownArt ? alt : copy.site.ogImageAlt }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: [{ url: image, alt: ownArt ? alt : copy.site.ogImageAlt }],
+    },
+  };
+}
 
 export default async function CounterPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

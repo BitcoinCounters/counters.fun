@@ -18,6 +18,16 @@ export const COUNTERPARTY_API_BASE = (
   process.env.COUNTERPARTY_API_BASE ?? "http://127.0.0.1:4000/v2"
 ).replace(/\/+$/, "");
 
+/**
+ * This site's own public origin. Only metadata needs it — Open Graph and
+ * Twitter cards are read by crawlers that cannot resolve a relative path, so
+ * the absolute URL has to be stated rather than inferred from the request.
+ */
+export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://counters.fun").replace(
+  /\/+$/,
+  "",
+);
+
 /** This site's own worker: the counters × pools join and the content proxy. */
 export const COUNTERS_API_BASE =
   process.env.NEXT_PUBLIC_COUNTERS_API_BASE ?? "http://localhost:8787";

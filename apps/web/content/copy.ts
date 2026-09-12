@@ -29,6 +29,20 @@ export const copy = {
       "Counters are files in Bitcoin witness data, owned through Counterparty assets. This is where they get markets. Nothing here is hosted: every image is read out of a Bitcoin block.",
     ogTitle: "counters.fun",
     ogDescription: "Counters with XCP liquidity pools. On-chain files only.",
+    ogImageAlt: "counters.fun — the market layer for Bitcoin Counters",
+
+    /** What a shared link to one counter says. A counter that trades leads
+     *  with what it trades at; one that does not leads with what it is. */
+    counter: {
+      title: (number: number, asset: string) => `Counter #${number} · ${asset} — counters.fun`,
+      pooled: (asset: string, price: string, liquidity: string, size: string, mime: string) =>
+        `${asset} trades at ${price} XCP with ${liquidity} XCP of liquidity. ${size} of ${mime}, in Bitcoin witness data.`,
+      unpooled: (asset: string, size: string, mime: string, block: string) =>
+        `${asset} — ${size} of ${mime} in Bitcoin witness data, block ${block}. No XCP pool yet.`,
+      pointer: (asset: string) =>
+        `${asset} is a counter whose description is a URL, not a file. counters.fun does not fetch it.`,
+      imageAlt: (number: number, asset: string) => `Counter #${number} — ${asset}`,
+    },
   },
 
   nav: [
