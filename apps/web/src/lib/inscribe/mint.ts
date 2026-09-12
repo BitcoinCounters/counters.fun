@@ -40,11 +40,12 @@ import {
   unsignedRevealTxid,
 } from "./psbt";
 import { STANDARD_WITNESS_LIMIT_WU } from "@/lib/constants";
-import { cpCompose, fetchAsset, type AssetInfo } from "@/lib/cp";
+import { cpCompose, fetchAsset, nodeKnowsTransaction, type AssetInfo } from "@/lib/cp";
 import { randomNumericAsset } from "@counters/core/assetnames";
 import { HARD_MIN_RATE } from "@counters/core/fees";
 import { MAX_WEIGHT, meetsFloor, routeFor } from "@counters/core/slipstream";
 import { handOffReveal, slipstreamRates } from "@/lib/slipstream";
+import { broadcastTransaction } from "@/lib/wallet/broadcast";
 import { fairminterComposeParams, fairminterProblems, type FairminterParams } from "@counters/core/fairminter";
 
 /**
@@ -487,8 +488,26 @@ export async function finishReveal(
   }
 
   onStage?.("broadcasting-reveal");
-  const txid = await wallet.broadcast(final.hex);
-  return { txid: txid || final.txid, hex: final.hex, weight: final.weight };
+  // A reveal this page signed goes out through this site's own node, not
+  // through the wallet's relay. The wallet's backend is a third party with its
+  // own policy, and it answered a self-signed reveal with a txid that never
+  // reached any mempool — the commit sat mined and unspent while the app
+  // reported a finished mint. The node either accepts the bytes or says why,
+  // and its "yes" is one this site can see.
+  const txid = key ? await broadcastTransaction(final.hex) : await wallet.broadcast(final.hex);
+  const sent = txid || final.txid;
+
+  // And check that the claim is true. A relay's txid is its word, not a fact
+  // about any mempool, and a reveal that was never relayed leaves a commit
+  // mined and unspent while this page says the mint is done. If the node has
+  // not heard of it, the caller keeps its pending mint and can try again.
+  if (!(await nodeKnowsTransaction(sent).catch(() => true))) {
+    throw new Error(
+      "The reveal was accepted by the relay but this site's node has never seen it, so it was " +
+        "not broadcast. The commit is untouched and the reveal can be sent again.",
+    );
+  }
+  return { txid: sent, hex: final.hex, weight: final.weight };
 }
 
 /**

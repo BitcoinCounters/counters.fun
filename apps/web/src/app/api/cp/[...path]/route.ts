@@ -35,6 +35,8 @@ const READ_ALLOWED: RegExp[] = [
   /^pools\/[^/]+\/[^/]+\/quote\/withdraw$/,
   /^bitcoin\/estimatesmartfee$/, // sat/kB from the node's own bitcoind
   /^bitcoin\/addresses\/[^/]+\/utxos$/, // BTC pre-flight before a compose
+  /^bitcoin\/transactions\/[0-9a-fA-F]{64}$/, // did a broadcast actually land?
+  /^bitcoin\/transactions\/[0-9a-fA-F]{64}$/, // did a broadcast actually land?
   /^blocks\/last$/, // the tip, for scheduling a launch
   /^assets\/[^/]+\/fairminters$/, // was this counter an XCP-69 launch?
   /^assets\/[^/]+\/balances$/,
