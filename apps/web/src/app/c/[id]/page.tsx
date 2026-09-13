@@ -354,7 +354,7 @@ function Provenance({ counter }: { counter: Extract<Awaited<ReturnType<typeof ge
         <Fact label="rolling hash" value={counter.rolling_hash ?? "—"} mono />
         <Fact
           label="protocol record"
-          value={`bitcoincounters.com/c/${counter.number}`}
+          value={`counters.gallery/c/${counter.number}`}
           href={countersExplorerUrl(counter.number)}
         />
       </div>

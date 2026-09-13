@@ -71,4 +71,4 @@ export const mempoolBlockUrl = (height: number) => `https://mempool.space/block/
 export const xcpAssetUrl = (asset: string) => `https://www.xcp.io/asset/${asset}`;
 /** The protocol's own explorer — the record of what a counter is. */
 export const countersExplorerUrl = (number: number) =>
-  `https://www.bitcoincounters.com/c/${number}`;
+  `https://counters.gallery/c/${number}`;
