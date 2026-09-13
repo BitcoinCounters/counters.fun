@@ -49,7 +49,7 @@ export const copy = {
     { href: "/pool/create", label: "Create LP" },
     { href: "/activity", label: "Activity" },
     { href: "/docs", label: "Docs" },
-    { href: "https://bitcoincounters.com", label: "BitcoinCounters" },
+    { href: "https://counters.gallery", label: "BitcoinCounters" },
   ],
 
   about: { label: "about" },
@@ -66,7 +66,7 @@ export const copy = {
     /** The second half renders in a dimmer colour. */
     headline: "Counterparty Inscriptions",
     headlineDim: "Marketplace",
-    lede: "A [**counter**](https://bitcoincounters.com) is an on chain inscription attached to a Counterparty Asset. Every image, text, audio, video or other file you see below is stored and read directly off the Bitcoin Blockchain.\n\nEvery counter is assigned an inscription number at birth",
+    lede: "A [**counter**](https://counters.gallery) is an on chain inscription attached to a Counterparty Asset. Every image, text, audio, video or other file you see below is stored and read directly off the Bitcoin Blockchain.\n\nEvery counter is assigned an inscription number at birth",
 
     stats: {
       pooled: "pooled",
