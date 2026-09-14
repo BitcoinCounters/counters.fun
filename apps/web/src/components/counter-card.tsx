@@ -20,6 +20,20 @@ import { big } from "@counters/core/numeric";
  * the 98 pointer counters the index also holds.
  */
 
+/**
+ * A tile shows about fifteen lines of a text counter, so that is all it gets.
+ * Handed whole, MEMENOME's 69 KB of on-chain JavaScript went into the home
+ * page twice — once as the `<pre>`, once in the RSC payload — and made it
+ * 537 KB. Telegram built no card for it while the 30 KB /docs, same tags and
+ * same image, previewed fine.
+ * The detail page is still the file in full.
+ */
+const CARD_BODY_CHARS = 2_000;
+
+function cardBody(body: string | null): string | null {
+  return body && body.length > CARD_BODY_CHARS ? `${body.slice(0, CARD_BODY_CHARS)}…` : body;
+}
+
 function Shell({
   counter,
   children,
@@ -42,7 +56,7 @@ function Shell({
           size={counter.size}
           isPointerLike={counter.is_pointer_like === 1}
           stampMime={counter.stamp_mime}
-          body={counter.body}
+          body={cardBody(counter.body)}
         />
         <span className="absolute right-2 top-2 rounded-md border border-line bg-black/60 px-1.5 py-0.5 font-mono text-[9.5px] uppercase tracking-[0.08em] text-dim">
           {/* The badge labels the tile under it, so a stamp reads GIF rather
