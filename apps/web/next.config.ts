@@ -31,6 +31,32 @@ const config: NextConfig = {
       { source: "/stamp/:n", destination: `${API}/stamp/:n` },
     ];
   },
+
+  /**
+   * The home page reads `?sort=`, which makes it dynamically rendered, and
+   * Next marks a dynamic response `private, no-cache, no-store`. That is the
+   * right default for a page about one signed-in user and the wrong one here:
+   * `private` says the response must not be shared, so a link-preview crawler
+   * has no business building a card from it, and chat clients duly showed no
+   * preview at all.
+   *
+   * Nothing on this page is per-user — the sort is in the URL, and a query
+   * string is part of the CDN cache key, so each variant caches on its own.
+   * The 30s window matches the `revalidate` on the data fetches underneath.
+   */
+  async headers() {
+    return [
+      {
+        source: "/",
+        headers: [
+          {
+            key: "cache-control",
+            value: "public, max-age=0, s-maxage=30, stale-while-revalidate=300",
+          },
+        ],
+      },
+    ];
+  },
 };
 
 export default config;
