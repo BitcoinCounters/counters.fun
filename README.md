@@ -1,6 +1,6 @@
 # counters.fun
 
-The market layer for [Bitcoin Counters](https://www.bitcoincounters.com) — and the
+The market layer for [Bitcoin Counters](https://counters.gallery) — and the
 only place that shows a token's art *because it is on Bitcoin*, never because a
 server hosts it.
 
