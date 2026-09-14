@@ -8,7 +8,7 @@ export interface Env {
 
   /** Counterparty Core v2 API, e.g. https://api.counterparty.io:4000 */
   COUNTERPARTY_API_BASE: string;
-  /** `counters server`, e.g. https://www.bitcoincounters.com */
+  /** `counters server`, e.g. https://counters.gallery */
   COUNTERS_API_BASE: string;
   /**
    * The only origin allowed to frame a counter's content. Defaults to 'self'

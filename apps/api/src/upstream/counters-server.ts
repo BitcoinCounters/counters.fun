@@ -1,6 +1,6 @@
 /**
  * Client for the `counters server` JSON API (the one behind
- * bitcoincounters.com). Reference implementation:
+ * counters.gallery). Reference implementation:
  * `/home/node/counters/counters/counters/server/app.py`.
  *
  * Surface: /status, /counters, /counter/<number|asset>, /block/<h>,

@@ -54,4 +54,4 @@ Connecting proves nothing cryptographically here. XCP Wallet signs BIP-322 and H
 
 ## Where the data comes from
 
-Counter numbers, content and provenance come from the [counters server](https://www.bitcoincounters.com), the protocol's reference indexer, which scans from block {{COUNTERS_GENESIS_BLOCK}}. Pools, balances and quotes come from Counterparty Core. This site joins the two, because the question it is built on — which counters have a pool — spans both and neither can answer it alone. Composing, signing and broadcasting stay between your wallet and the node.
+Counter numbers, content and provenance come from the [counters server](https://counters.gallery), the protocol's reference indexer, which scans from block {{COUNTERS_GENESIS_BLOCK}}. Pools, balances and quotes come from Counterparty Core. This site joins the two, because the question it is built on — which counters have a pool — spans both and neither can answer it alone. Composing, signing and broadcasting stay between your wallet and the node.

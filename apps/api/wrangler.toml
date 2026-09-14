@@ -19,7 +19,7 @@ enabled = true
 
 [vars]
 COUNTERPARTY_API_BASE = "https://api.counterparty.io:4000"
-COUNTERS_API_BASE = "https://www.bitcoincounters.com"
+COUNTERS_API_BASE = "https://counters.gallery"
 # The only origin allowed to frame a counter's on-chain content. Set to the
 # real origin before deploying; 'self' is a development default that would
 # silently stop the web app from rendering HTML counters in production.
