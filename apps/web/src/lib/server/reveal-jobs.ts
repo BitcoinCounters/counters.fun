@@ -230,8 +230,25 @@ function bytesToHex(bytes: Uint8Array): string {
 /* Storage                                                             */
 /* ------------------------------------------------------------------ */
 
-const meta = (txid: string) => join(DIR, `${txid}.json`);
-const hexFile = (txid: string) => join(DIR, `${txid}.hex`);
+const TXID = /^[0-9a-fA-F]{64}$/;
+
+/**
+ * A job's file name, from a txid and nothing else.
+ *
+ * The txid reaches here from a query string — `GET /api/reveal?commit=` —
+ * and it becomes a path. Left unchecked, `commit=../package` read this app's
+ * package.json back to whoever asked, and any `.json` file the server could
+ * open was one `../` further. Refusing here rather than in the route means
+ * there is no caller that can forget; `readJob` and `readHex` already turn a
+ * throw into "no such job".
+ */
+function jobFile(txid: string, extension: "json" | "hex"): string {
+  if (!TXID.test(txid)) throw new Error("not a txid");
+  return join(DIR, `${txid}.${extension}`);
+}
+
+const meta = (txid: string) => jobFile(txid, "json");
+const hexFile = (txid: string) => jobFile(txid, "hex");
 
 async function save(job: RevealJob): Promise<void> {
   await mkdir(DIR, { recursive: true });
@@ -307,7 +324,7 @@ export async function enqueue(input: {
   asset?: string | null;
 }): Promise<RevealJob> {
   const { commitTxid, revealHex, source } = input;
-  if (!/^[0-9a-fA-F]{64}$/.test(commitTxid)) {
+  if (!TXID.test(commitTxid)) {
     throw new EnqueueError("commitTxid must be a 64-character hex txid");
   }
   if (!/^[0-9a-fA-F]+$/.test(revealHex) || revealHex.length < 20) {
