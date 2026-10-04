@@ -16,8 +16,49 @@
  */
 
 import { renderMode } from "@counters/core/counter";
+import type { Delegate } from "@/lib/api";
 import { contentUrl, stampUrl } from "@/lib/constants";
 import { fmtSize, mimeTag, shortMime } from "@/lib/format";
+
+/**
+ * What is actually drawn for a counter: its own file, or — for a delegate —
+ * the file of the counter it names, with the display fragment on the URL.
+ *
+ * This is the reference explorer's rule 9, and the resolution is the
+ * indexer's: `delegate` arrives already resolved to an indexed counter, and
+ * nothing here reads a body to decide it. The fragment is what makes 300
+ * editions out of one file — RARE.PEPE's SVG styles itself by `:target`, so
+ * `/content/219#edition-5` is edition five of it. The bytes are still the
+ * same on-chain bytes, through the same proxy and into the same sandbox; the
+ * fragment never reaches a server.
+ */
+export function rendered(counter: {
+  number: number;
+  contentType: string;
+  size: number;
+  stampMime?: string | null;
+  delegate?: Delegate | null;
+}): { number: number; contentType: string; size: number; stampMime: string | null; fragment: string } {
+  const d = counter.delegate;
+  if (!d) {
+    return {
+      number: counter.number,
+      contentType: counter.contentType,
+      size: counter.size,
+      stampMime: counter.stampMime ?? null,
+      fragment: "",
+    };
+  }
+  return {
+    number: d.number,
+    contentType: d.content_type,
+    size: d.size,
+    stampMime: null,
+    // The indexer validates the fragment's charset; checked again because it
+    // is about to be part of a URL, and an unexpected one is simply dropped.
+    fragment: d.fragment && /^[A-Za-z0-9._~-]{1,64}$/.test(d.fragment) ? `#${d.fragment}` : "",
+  };
+}
 
 interface Props {
   number: number;
@@ -30,6 +71,8 @@ interface Props {
   stampMime?: string | null;
   /** Inline body the indexer already returned, for small textual counters. */
   body?: string | null;
+  /** The counter whose file this one renders in place of its own. */
+  delegate?: Delegate | null;
   /** Cards are a picture of the thing; a detail page is the thing. */
   interactive?: boolean;
   className?: string;
@@ -42,15 +85,20 @@ export function CounterContent({
   size,
   isPointerLike,
   stampMime,
-  body,
+  body: ownBody,
+  delegate,
   interactive = false,
   className = "",
 }: Props) {
+  const shown = rendered({ number, contentType, size, stampMime, delegate });
+  // A delegate's own body is the reference, not the file it shows.
+  const body = delegate ? null : ownBody;
+  const src = `${contentUrl(shown.number)}${shown.fragment}`;
   const mode = renderMode({
     is_pointer_like: isPointerLike,
-    size,
-    content_type: contentType,
-    stamp_mime: stampMime ?? null,
+    size: shown.size,
+    content_type: shown.contentType,
+    stamp_mime: shown.stampMime,
   });
 
   if (mode === "none") return <PointerRefusal body={body} className={className} />;
@@ -68,7 +116,7 @@ export function CounterContent({
       // cached, and the Next pipeline would resize content whose exact pixels
       // are the point.
       <img
-        src={stampUrl(number)}
+        src={stampUrl(shown.number)}
         alt={`Counter #${number} — ${asset}`}
         loading="lazy"
         decoding="async"
@@ -84,7 +132,7 @@ export function CounterContent({
       // Next image pipeline would add a resize step in front of content whose
       // exact pixels are the point.
       <img
-        src={contentUrl(number)}
+        src={src}
         alt={`Counter #${number} — ${asset}`}
         loading="lazy"
         decoding="async"
@@ -101,11 +149,11 @@ export function CounterContent({
     // not worth it. On a detail page the file is the point, so fetch it: a
     // browser handed text/* renders it as text, and the sandbox keeps that
     // true even if the bytes claim otherwise.
-    if (!interactive) return <Opaque contentType={contentType} size={size} className={className} />;
+    if (!interactive) return <Opaque contentType={shown.contentType} size={shown.size} className={className} />;
     return (
       <iframe
-        src={contentUrl(number)}
-        title={`Counter #${number} — ${asset} (${shortMime(contentType)})`}
+        src={src}
+        title={`Counter #${number} — ${asset} (${shortMime(shown.contentType)})`}
         sandbox="allow-scripts"
         className={`counter-frame ${className}`}
       />
@@ -115,11 +163,11 @@ export function CounterContent({
   if (mode === "document") {
     // A PDF or an audio file in a frame is a browser toolbar, not the file.
     // Cards get an honest placeholder; the detail page gets the real viewer.
-    if (!interactive) return <Opaque contentType={contentType} size={size} className={className} />;
+    if (!interactive) return <Opaque contentType={shown.contentType} size={shown.size} className={className} />;
     return (
       <iframe
-        src={contentUrl(number)}
-        title={`Counter #${number} — ${asset} (${shortMime(contentType)})`}
+        src={src}
+        title={`Counter #${number} — ${asset} (${shortMime(shown.contentType)})`}
         sandbox="allow-scripts"
         className={`counter-frame ${className}`}
       />
@@ -128,8 +176,8 @@ export function CounterContent({
 
   return (
     <iframe
-      src={contentUrl(number)}
-      title={`Counter #${number} — ${asset} (${shortMime(contentType)})`}
+      src={src}
+      title={`Counter #${number} — ${asset} (${shortMime(shown.contentType)})`}
       loading="lazy"
       // Belt and braces: the proxy's CSP already sandboxes the document, and
       // this attribute means a misconfigured proxy still cannot give on-chain

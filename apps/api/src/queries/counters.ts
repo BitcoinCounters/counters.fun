@@ -62,6 +62,59 @@ export interface CounterRow {
   launchpad: string | null;
 }
 
+/** What a delegate renders instead of its own body — see 0004_delegates. */
+export interface Delegate {
+  number: number;
+  content_type: string;
+  size: number;
+  fragment: string | null;
+}
+
+/**
+ * The same rows, each with its `delegate` — the counter whose file it
+ * renders — or null.
+ *
+ * A second lookup rather than a join in every statement above, and one that
+ * is allowed to fail: the table arrives by migration, and until it has, a
+ * delegate is shown as the reference it literally is rather than the listing
+ * it sits in failing with it.
+ */
+export async function withDelegates<T extends { number: number }>(
+  db: D1Database,
+  rows: T[],
+): Promise<(T & { delegate: Delegate | null })[]> {
+  const found = new Map<number, Delegate>();
+  try {
+    // Ninety numbers a statement: D1 allows a hundred bound parameters.
+    const numbers = [...new Set(rows.map((r) => r.number))];
+    const lookups: Promise<
+      { number: number; target_number: number; target_type: string; target_size: number; fragment: string | null }[]
+    >[] = [];
+    for (let i = 0; i < numbers.length; i += 90) {
+      const slice = numbers.slice(i, i + 90);
+      lookups.push(
+        q(
+          db,
+          `SELECT number, target_number, target_type, target_size, fragment
+             FROM delegates WHERE number IN (${slice.map((_, n) => `?${n + 1}`).join(",")})`,
+          ...slice,
+        ),
+      );
+    }
+    for (const d of (await Promise.all(lookups)).flat()) {
+      found.set(d.number, {
+        number: d.target_number,
+        content_type: d.target_type,
+        size: d.target_size,
+        fragment: d.fragment,
+      });
+    }
+  } catch (cause) {
+    console.error("[read] delegates unavailable:", (cause as Error).message);
+  }
+  return rows.map((row) => ({ ...row, delegate: found.get(row.number) ?? null }));
+}
+
 export interface PooledCounterRow extends CounterRow {
   asset_a: string;
   asset_b: string;
@@ -163,9 +216,9 @@ export function pooledCounters(
 }
 
 /**
- * On-chain counters with no pool yet. With one pooled counter against
- * seventy on-chain ones, this is the section that carries the site today —
- * each row is a Create LP away from the listing above.
+ * On-chain counters with no pool yet — each one a Create LP away from the
+ * pooled listing. The home page no longer shows these, so this is read only
+ * through `?filter=unpooled`.
  */
 export function unpooledCounters(db: D1Database, limit = 100, before?: number): Promise<CounterRow[]> {
   const cursor = before ?? Number.MAX_SAFE_INTEGER;
@@ -182,6 +235,129 @@ export function unpooledCounters(db: D1Database, limit = 100, before?: number): 
       LIMIT ?2`,
     cursor,
     limit,
+  );
+}
+
+export interface OfferRow extends CounterRow {
+  /** The order's or dispenser's own tx hash. */
+  offer_id: string;
+  offer_kind: string;
+  /** 'ask' when the counter is what is being sold, 'bid' when it is wanted. */
+  offer_side: string;
+  offer_price: number;
+  offer_asset: string;
+  offer_remaining: string | null;
+  offer_source: string | null;
+  offer_block: number;
+  /** 1 when the counter also has a pool, so the listing can say so. */
+  has_pool: number;
+}
+
+/**
+ * Which listings a venue shows: one per open order or dispenser, on a
+ * counter the site lists.
+ *
+ * An order between two counters is stored twice — an ask on the one given
+ * and a bid on the one wanted (see the `listings` key in 0003) — and is shown
+ * once, as the ask. All 268 open orders that want RARE.PEPE are a RARE.PEPE.N
+ * being offered for it; listed from both ends the venue would be twice as
+ * long and half of it would be the other half read backwards. A bid whose
+ * other side is not a counter — XCP for GAMESOFTRUMP — has no ask row and is
+ * shown as the bid it is.
+ */
+const OFFERS = `
+       FROM listings l
+       JOIN counters c ON c.asset = l.token_asset
+      WHERE l.kind = ?1
+        AND ${ON_CHAIN}
+        AND ${NOT_AN_LP_TOKEN}
+        AND ${ORIGINAL_ONLY}
+        AND (l.side = 'ask'
+             OR NOT EXISTS (SELECT 1 FROM listings a WHERE a.id = l.id AND a.side = 'ask'))`;
+
+/**
+ * One venue's open offers — every open DEX order, or every open dispenser —
+ * each with the counter it is on.
+ *
+ * Per offer rather than per counter: a counter with three dispensers at
+ * three prices is three things a buyer can choose between, and picking the
+ * "best" one for them hides the other two. Pooled counters are included; a
+ * pool and a standing offer are different ways to buy the same thing.
+ *
+ * Newest first: unlike liquidity, an offer has no depth to rank it by, and
+ * the interesting thing about a listing is that someone just made it.
+ */
+export function venueOffers(
+  db: D1Database,
+  kind: "order" | "dispenser",
+  limit = 100,
+  offset = 0,
+): Promise<OfferRow[]> {
+  return q<OfferRow>(
+    db,
+    `SELECT ${COUNTER_COLUMNS},
+            l.id AS offer_id, l.kind AS offer_kind, l.side AS offer_side,
+            l.price AS offer_price, l.price_asset AS offer_asset,
+            l.remaining AS offer_remaining, l.source AS offer_source,
+            l.block_index AS offer_block,
+            EXISTS (SELECT 1 FROM pools p WHERE p.token_asset = c.asset) AS has_pool
+     ${OFFERS}
+      ORDER BY l.block_index DESC, c.number ASC, l.id ASC
+      LIMIT ?2 OFFSET ?3`,
+    kind,
+    limit,
+    offset,
+  );
+}
+
+export interface VenueCounts {
+  pool: number;
+  dex: number;
+  dispenser: number;
+}
+
+/**
+ * How much is on each venue, for the toggle. Counted rather than taken from
+ * the lists' lengths because the lists are pages: the DEX has more open
+ * orders than one page holds, and "50" on the toggle would be the page size.
+ */
+export async function venueCounts(db: D1Database): Promise<VenueCounts> {
+  const [pool, dex, dispenser] = await Promise.all([
+    one<{ n: number }>(
+      db,
+      `SELECT COUNT(*) AS n FROM counters c
+         JOIN pools p ON p.token_asset = c.asset
+        WHERE ${ON_CHAIN} AND ${ORIGINAL_ONLY}`,
+    ),
+    one<{ n: number }>(db, `SELECT COUNT(*) AS n ${OFFERS}`, "order"),
+    one<{ n: number }>(db, `SELECT COUNT(*) AS n ${OFFERS}`, "dispenser"),
+  ]);
+  return { pool: pool?.n ?? 0, dex: dex?.n ?? 0, dispenser: dispenser?.n ?? 0 };
+}
+
+export interface ListingRow {
+  id: string;
+  kind: string;
+  token_asset: string;
+  side: string;
+  price: number;
+  price_asset: string;
+  remaining: string | null;
+  source: string | null;
+  block_index: number;
+}
+
+/** Every open offer on one counter, asks first and cheapest first. */
+export function listingsFor(db: D1Database, asset: string): Promise<ListingRow[]> {
+  return q<ListingRow>(
+    db,
+    `SELECT id, kind, token_asset, side, price, price_asset, remaining, source, block_index
+       FROM listings
+      WHERE token_asset = ?1
+      ORDER BY CASE side WHEN 'ask' THEN 0 ELSE 1 END,
+               CASE price_asset WHEN 'XCP' THEN 0 WHEN 'BTC' THEN 1 ELSE 2 END,
+               price ASC`,
+    asset,
   );
 }
 
@@ -267,6 +443,7 @@ export interface Stats {
   counters_total: number;
   counters_on_chain: number;
   pooled: number;
+  listed: number;
   minting: number;
   bytes_on_chain: number;
   tip: number;
@@ -275,7 +452,7 @@ export interface Stats {
 }
 
 export async function stats(db: D1Database): Promise<Stats> {
-  const [totals, pooled, minting, state] = await Promise.all([
+  const [totals, pooled, listed, minting, state] = await Promise.all([
     one<{ total: number; on_chain: number; bytes: number }>(
       db,
       `SELECT COUNT(*) AS total,
@@ -291,6 +468,12 @@ export async function stats(db: D1Database): Promise<Stats> {
     ),
     one<{ n: number }>(
       db,
+      `SELECT COUNT(DISTINCT c.asset) AS n FROM counters c
+        JOIN listings l ON l.token_asset = c.asset AND l.side = 'ask'
+       WHERE ${ON_CHAIN}`,
+    ),
+    one<{ n: number }>(
+      db,
       `SELECT COUNT(*) AS n FROM fairminters WHERE status IN ('open','pending') AND counter_number IS NOT NULL`,
     ),
     q<{ key: string; value: string }>(db, `SELECT key, value FROM chain_state`),
@@ -301,6 +484,7 @@ export async function stats(db: D1Database): Promise<Stats> {
     counters_total: totals?.total ?? 0,
     counters_on_chain: totals?.on_chain ?? 0,
     pooled: pooled?.n ?? 0,
+    listed: listed?.n ?? 0,
     minting: minting?.n ?? 0,
     bytes_on_chain: totals?.bytes ?? 0,
     tip: Number(kv.get("tip") ?? 0),

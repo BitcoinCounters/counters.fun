@@ -1,18 +1,19 @@
 import Link from "next/link";
 import { circulatingSupply, sizeBadge } from "@counters/core/counter";
 import { marketCap } from "@counters/core/pool";
-import type { CounterRow, MintingCounter, PooledCounter } from "@/lib/api";
-import { fmtBlocks, fmtCompact, fmtPct, fmtPrice, fmtSize, mimeTag, pctChange } from "@/lib/format";
+import type { CounterRow, MintingCounter, Offer, PooledCounter } from "@/lib/api";
+import { fmtAsk, fmtBlocks, fmtCompact, fmtPct, fmtPrice, fmtSize, mimeTag, pctChange } from "@/lib/format";
 import { CounterContent } from "@/components/counter-content";
 import { LaunchpadTag } from "@/components/launchpad-tag";
 import { Meter } from "@/components/meter";
 import { mintProgress } from "@counters/core/fairminter";
 import { big } from "@counters/core/numeric";
+import { copy } from "@content/copy";
 
 /**
- * The card. One shape across all three home-page sections, because they are
- * the same object in different states — a counter, on its way to having a
- * pool, or with one.
+ * The card. One shape across every home-page listing, because they are the
+ * same object in different states — a counter on its way to having a pool,
+ * with one, or on offer from its holder.
  *
  * The whole tile carries `holo-border`: every counter that reaches this
  * component has already passed the on-chain filter in the API's SQL, so the
@@ -57,12 +58,13 @@ function Shell({
           isPointerLike={counter.is_pointer_like === 1}
           stampMime={counter.stamp_mime}
           body={cardBody(counter.body)}
+          delegate={counter.delegate}
         />
         <span className="absolute right-2 top-2 rounded-md border border-line bg-black/60 px-1.5 py-0.5 font-mono text-[9.5px] uppercase tracking-[0.08em] text-dim">
           {/* The badge labels the tile under it, so a stamp reads GIF rather
               than PLAIN. The counter's own `text/plain` is not hidden — the
               detail page still states what the witness actually holds. */}
-          {mimeTag(counter.stamp_mime ?? counter.content_type)}
+          {mimeTag(counter.delegate?.content_type ?? counter.stamp_mime ?? counter.content_type)}
         </span>
         {badge && (
           <span className="absolute left-2 top-2 rounded-md border border-gold/40 bg-black/60 px-1.5 py-0.5 font-mono text-[9.5px] uppercase tracking-[0.08em] text-gold">
@@ -175,22 +177,44 @@ export function MintingCard({ counter, tip }: { counter: MintingCounter; tip: nu
 }
 
 /**
- * An on-chain counter with no pool. The CTA is the whole point of the
- * section: with seventy on-chain counters and one pool, this is where the
- * listing above comes from.
+ * One open dispenser, on the counter it vends.
+ *
+ * One card per dispenser rather than per counter: RARE.PEPE has three open
+ * at three prices, and those are three offers a buyer chooses between, not
+ * one counter with a best price picked for them.
+ *
+ * The price carries its unit because it has to: a dispenser prices in BTC,
+ * and every other card on the site quotes XCP. A bare number here under the
+ * same visual treatment as a pool price would read as XCP and be wrong.
+ *
+ * `has_pool` is not hidden either. A counter with a pool appears under both
+ * venues, which is the truth about it — two different offers on the same
+ * counter — rather than a duplicate.
  */
-export function UnpooledCard({ counter }: { counter: CounterRow }) {
+export function DispenserCard({ offer }: { offer: Offer }) {
   return (
-    <Shell counter={counter}>
+    <Shell counter={offer}>
       <div className="flex items-baseline justify-between gap-2 border-t border-line2 pt-2">
-        <span className="font-mono text-[10px] uppercase tracking-wider text-faint">supply</span>
-        <span className="font-mono text-[11px] text-dim">
-          {fmtCompact(counter.supply, counter.divisible === 1)}
+        <span className="font-mono text-[10px] uppercase tracking-wider text-faint">
+          {copy.home.dispensers.price}
+        </span>
+        <span className="font-mono text-[11px] text-ink">
+          {fmtAsk(offer.offer_price, offer.offer_asset)}
         </span>
       </div>
-      <span className="mt-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-copper opacity-0 transition-opacity group-hover:opacity-100">
-        create lp →
-      </span>
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="font-mono text-[10px] uppercase tracking-wider text-faint">
+          {copy.home.dispensers.remaining}
+        </span>
+        <span className="font-mono text-[11px] text-dim">
+          {fmtCompact(offer.offer_remaining, offer.divisible === 1)}
+        </span>
+      </div>
+      {offer.has_pool === 1 && (
+        <span className="mt-0.5 font-mono text-[9.5px] uppercase tracking-[0.12em] text-patina">
+          {copy.home.alsoPooled}
+        </span>
+      )}
     </Shell>
   );
 }

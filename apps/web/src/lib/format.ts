@@ -64,6 +64,26 @@ export function fmtPrice(price: number | null): string {
   return price.toExponential(3);
 }
 
+/**
+ * A listing's ask, with the unit it is actually denominated in.
+ *
+ * Unlike a pool price, an ask is not necessarily in XCP: a dispenser always
+ * prices in BTC and an order's maker picks the pair. The unit is part of the
+ * number here rather than a fixed label beside it, and nothing converts
+ * between them — see packages/counters/src/listing.ts.
+ *
+ * BTC gets satoshi-place decimals rather than `fmtPrice`'s exponent, because
+ * 0.00005500 is how a bitcoin amount is read and 5.500e-5 is not.
+ */
+export function fmtAsk(price: number | null, asset: string): string {
+  if (price === null || !Number.isFinite(price) || price <= 0) return "—";
+  if (asset === "BTC") {
+    if (price < 1e-8) return `${price.toExponential(3)} BTC`;
+    return `${price.toFixed(8).replace(/0+$/, "").replace(/\.$/, "")} BTC`;
+  }
+  return `${fmtPrice(price)} ${asset}`;
+}
+
 /** Signed percentage change, or null when there is no baseline to compare to. */
 export function pctChange(now: number | null, then: number | null): number | null {
   if (now === null || then === null || then === 0) return null;

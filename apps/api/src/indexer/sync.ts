@@ -13,6 +13,8 @@ import type { Pool } from "@counters/core/pool";
 import type { Fairminter } from "@counters/core/fairminter";
 import { seedsPool } from "@counters/core/fairminter";
 import { launchpadOfFairminter } from "@counters/core/launchpad";
+import { listingFromDispenser, listingFromOrder, type Listing } from "@counters/core/listing";
+import { ledgerAssetName } from "@counters/core/counter";
 import { isXcpPool, poolPrice, priceFromReserves, tokenSide } from "@counters/core/pool";
 import { big } from "@counters/core/numeric";
 import type { Env } from "#api/env";
@@ -33,6 +35,9 @@ export interface SyncReport {
   fairminters: number;
   snapshots: number;
   matches: number;
+  listings: number;
+  /** Counter assets asked about this tick — see `syncListings`. */
+  swept: number;
   tip: number;
 }
 
@@ -48,6 +53,8 @@ export async function sync(env: Env): Promise<SyncReport> {
     fairminters: 0,
     snapshots: 0,
     matches: 0,
+    listings: 0,
+    swept: 0,
     tip: tip.counterparty_height,
   };
 
@@ -56,6 +63,16 @@ export async function sync(env: Env): Promise<SyncReport> {
   written.snapshots = snapshots;
   written.matches = matches;
   written.fairminters = await syncFairminters(env.DB, cp);
+
+  // Its own failure, not the tick's: the tip and the timestamps below are
+  // what the site reports as "synced", and they describe the stages above.
+  try {
+    const listings = await syncListings(env.DB, cp, tip.counterparty_height);
+    written.listings = listings.listings;
+    written.swept = listings.swept;
+  } catch (cause) {
+    console.error("[sync] listings not refreshed:", (cause as Error).message);
+  }
 
   await setState(env.DB, "tip", String(tip.counterparty_height));
   await setState(env.DB, "counters_indexed", String(status.indexed));
@@ -125,9 +142,31 @@ async function syncCounters(
     await setState(db, "counters_walk_truncated", String(Date.now()));
   }
 
+  // A number names one reveal forever, so a server that puts a different
+  // reveal at a number this table already holds is not the index the table
+  // was built from — and everything above the first disagreement is numbered
+  // by the same different rule. Nothing from such a walk is stored.
+  const disputed = await renumbered(db, fetched);
+  await setState(db, "counters_renumbered", disputed === null ? "" : String(disputed));
+  if (disputed !== null) {
+    console.error(
+      `[sync] counters server disagrees with the stored numbering at #${disputed}; ` +
+        `no counters written. Numbers are immutable — check COUNTERS_API_BASE.`,
+    );
+    return 0;
+  }
+
   if (fetched.length > 0) await upsertCounters(db, fetched);
 
   const filled = await backfillGaps(db, server);
+
+  // Its own failure, like the listings: the table arrives by migration, and a
+  // sync that runs before it does should still index counters.
+  try {
+    await syncDelegates(db, server, fetched, cold);
+  } catch (cause) {
+    console.error("[sync] delegates not recorded:", (cause as Error).message);
+  }
 
   // A count mismatch means the index is still short. Recorded rather than
   // thrown: a partial index is serviceable, and the next tick continues.
@@ -142,6 +181,101 @@ async function syncCounters(
   // already stored is not an addition, and the report is read as "how much
   // did the index grow".
   return unseen + filled;
+}
+
+/**
+ * Record which counters render another counter's file.
+ *
+ * The walk above only reaches the newest page once the table is warm, and
+ * the 300 RARE.PEPE editions were all indexed before this table existed — so
+ * the first run after the migration walks the whole index once for its
+ * `delegate` fields, and every run after that keeps up from the page it
+ * already fetched. Only a *resolved* delegate is stored: one whose target is
+ * not an indexed counter has nothing to render, and shows as the reference
+ * it literally is.
+ */
+async function syncDelegates(
+  db: D1Database,
+  server: CountersServer,
+  fetched: Counter[],
+  walkedEverything: boolean,
+): Promise<void> {
+  let counters = fetched;
+  const seeded = await one<{ value: string }>(
+    db,
+    `SELECT value FROM chain_state WHERE key = 'delegates_seeded'`,
+  );
+  if (!seeded && !walkedEverything) {
+    counters = [];
+    for await (const batch of server.walk(100, 200)) counters.push(...batch);
+  }
+
+  const writes: D1PreparedStatement[] = [];
+  for (const c of counters) {
+    const d = c.delegate;
+    if (d && d.number != null && d.content_type && d.size != null) {
+      writes.push(
+        db
+          .prepare(
+            `INSERT INTO delegates (number, target_number, target_type, target_size, fragment)
+             VALUES (?1,?2,?3,?4,?5)
+             ON CONFLICT(number) DO UPDATE SET
+               target_number = excluded.target_number,
+               target_type = excluded.target_type,
+               target_size = excluded.target_size,
+               fragment = excluded.fragment`,
+          )
+          .bind(c.number, d.number, d.content_type, d.size, d.fragment ?? null),
+      );
+    }
+  }
+  for (let i = 0; i < writes.length; i += 50) await db.batch(writes.slice(i, i + 50));
+  if (!seeded) await setState(db, "delegates_seeded", String(Date.now()));
+}
+
+/**
+ * The lowest number at which the server and this table name different
+ * reveals, or null when they agree on every number both hold.
+ *
+ * The upsert below is keyed by number and refreshes only the fields that can
+ * change, which is right exactly as long as the number means the same reveal
+ * on both sides. When it does not, the result is not an error but a chimera:
+ * the row keeps its asset and takes the other counter's supply, owner and
+ * body. A local counters server that had fairminter deploys in a different
+ * block order numbered MEMENOME #162 instead of #160 and shifted everything
+ * after it; one sync against it left #215 FAKEBANG with DEGENT.1's supply of
+ * one unit — a market cap of zero — and #160 MEMENOME rendering GREENER's
+ * file. The walk is newest-first and a shift moves every later number, so the
+ * newest rows already held are always among the ones that show it.
+ */
+async function renumbered(db: D1Database, fresh: Counter[]): Promise<number | null> {
+  if (fresh.length === 0) return null;
+  let low = Infinity;
+  let high = -Infinity;
+  for (const c of fresh) {
+    if (c.number < low) low = c.number;
+    if (c.number > high) high = c.number;
+  }
+  const stored = new Map(
+    (
+      await q<{ number: number; txid: string; msg_index: number }>(
+        db,
+        `SELECT number, txid, msg_index FROM counters WHERE number BETWEEN ?1 AND ?2`,
+        low,
+        high,
+      )
+    ).map((row) => [row.number, row]),
+  );
+
+  let first: number | null = null;
+  for (const c of fresh) {
+    const row = stored.get(c.number);
+    if (!row) continue;
+    if (row.txid !== c.txid || row.msg_index !== c.msg_index) {
+      if (first === null || c.number < first) first = c.number;
+    }
+  }
+  return first;
 }
 
 /**
@@ -429,6 +563,265 @@ async function rollupPools(db: D1Database): Promise<void> {
     )
     .bind(since)
     .run();
+}
+
+/* -------------------------------------------------------------------- */
+/* Listings                                                             */
+/* -------------------------------------------------------------------- */
+
+/**
+ * How many counter assets one tick asks Counterparty about when nothing is
+ * known to have changed — the background pass.
+ *
+ * The cost is two subrequests per asset. Forty a tick is 80, and the 417
+ * on-chain counter assets come round in eleven ticks, a little under an hour.
+ * That is acceptable only because it is not what keeps the venues current:
+ * `followListingEvents` does that, block by block, and this pass exists to
+ * correct whatever that missed.
+ */
+const LISTING_SWEEP_BATCH = 40;
+
+/**
+ * The ceiling when more than a batch is known to be stale — assets a block
+ * just touched, or counters never asked about. One block opened orders on
+ * 268 RARE.PEPE.N at once; at forty a tick the last of them would surface
+ * half an hour after it was on chain.
+ */
+const LISTING_SWEEP_MAX = 150;
+
+/** How many assets are asked about at once. Ordinary politeness to the node. */
+const LISTING_CONCURRENCY = 6;
+
+/**
+ * How far back the event follower will read. A sync that has been down for
+ * longer than this does not replay the gap — the background pass re-reads
+ * every asset within the hour anyway, and a day of blocks is a day of
+ * subrequests.
+ */
+const LISTING_EVENT_BLOCKS = 12;
+
+/**
+ * Mark the assets whose offers changed since the last tick, so the sweep
+ * reads them first.
+ *
+ * Nothing on Counterparty changes between blocks, so a block is the unit:
+ * each one since the last tick is asked for its order and dispenser events,
+ * and any counter one of them names is due again. "Names" is deliberately
+ * loose. An OPEN_ORDER carries `give_asset` and `get_asset`, a
+ * DISPENSER_UPDATE carries `asset`, and a CANCEL_ORDER or ORDER_EXPIRATION
+ * carries only the hash of the order it ends — so every string in an event's
+ * params is checked against the counters' ledger names and against the
+ * hashes of the listings already stored, rather than each event type being
+ * taken apart by field.
+ *
+ * Marking is deleting the asset's `listing_sweeps` row: the sweep orders by
+ * that timestamp with a missing one first, so there is one queue and no
+ * second notion of priority to keep in step with it.
+ */
+async function followListingEvents(db: D1Database, cp: Counterparty, tip: number): Promise<void> {
+  const last = await one<{ value: string }>(
+    db,
+    `SELECT value FROM chain_state WHERE key = 'listings_block'`,
+  );
+  if (!last) {
+    // First run: there is no "since". Every asset is unswept and the sweep
+    // will reach all of them; following starts from here.
+    await setState(db, "listings_block", String(tip));
+    return;
+  }
+
+  const from = Math.max(Number(last.value) + 1, tip - LISTING_EVENT_BLOCKS + 1);
+  if (from > tip) return;
+
+  const [assets, stored] = await Promise.all([
+    q<{ asset: string; asset_id: string }>(
+      db,
+      `SELECT asset, MAX(asset_id) AS asset_id FROM counters
+        WHERE is_pointer_like = 0 AND size > 0 GROUP BY asset`,
+    ),
+    q<{ id: string; token_asset: string }>(db, `SELECT id, token_asset FROM listings`),
+  ]);
+  // Ledger name or offer hash → the counters it concerns. An order between
+  // two counters is two listings under one hash, hence the list.
+  const concerns = new Map<string, string[]>();
+  const note = (key: string, asset: string) => {
+    const list = concerns.get(key);
+    if (list) list.push(asset);
+    else concerns.set(key, [asset]);
+  };
+  for (const row of assets) note(ledgerAssetName(row), row.asset);
+  for (const row of stored) note(row.id, row.token_asset);
+
+  const touched = new Set<string>();
+  let reached = from - 1;
+  for (let block = from; block <= tip; block += 1) {
+    let events;
+    try {
+      events = await cp.blockMarketEvents(block);
+    } catch {
+      // Stop rather than skip: the next tick resumes at this block, and a
+      // block passed over is an offer that stays wrong until the background
+      // pass comes round.
+      break;
+    }
+    for (const event of events) {
+      for (const value of Object.values(event.params ?? {})) {
+        if (typeof value !== "string") continue;
+        for (const asset of concerns.get(value) ?? []) touched.add(asset);
+      }
+    }
+    reached = block;
+  }
+
+  const due = [...touched];
+  const writes: D1PreparedStatement[] = [];
+  // Fifty names a statement: D1 allows a hundred bound parameters.
+  for (let i = 0; i < due.length; i += 50) {
+    const slice = due.slice(i, i + 50);
+    writes.push(
+      db
+        .prepare(
+          `DELETE FROM listing_sweeps WHERE asset IN (${slice.map((_, n) => `?${n + 1}`).join(",")})`,
+        )
+        .bind(...slice),
+    );
+  }
+  if (writes.length > 0) await db.batch(writes);
+  if (reached >= from) await setState(db, "listings_block", String(reached));
+}
+
+/**
+ * Refresh open orders and dispensers for the counter assets that are due:
+ * the ones a block just touched, then the stalest.
+ *
+ * The whole open set for an asset is re-read and replaces what was stored,
+ * rather than the events being applied one by one: rows that vanished
+ * upstream vanish here, which is the only way a filled order stops being
+ * displayed as an offer, and it means an event this job misread costs a
+ * late refresh instead of a wrong row that never heals.
+ *
+ * LP tokens are swept too rather than excluded. One of them is a counter
+ * (#163 is MEMENOME's own LP token) and an open offer on it is a real offer;
+ * the listing query is what decides they do not belong in a tokens listing.
+ */
+async function syncListings(
+  db: D1Database,
+  cp: Counterparty,
+  tip: number,
+): Promise<{ listings: number; swept: number }> {
+  await followListingEvents(db, cp, tip);
+
+  // Everything with no sweep on record is known to be stale — touched by a
+  // block, or a counter that arrived this tick — and is read now, up to the
+  // ceiling. Past that the batch is the background pass.
+  const unswept = await one<{ n: number }>(
+    db,
+    `SELECT COUNT(DISTINCT c.asset) AS n
+       FROM counters c
+       LEFT JOIN listing_sweeps s ON s.asset = c.asset
+      WHERE c.is_pointer_like = 0 AND c.size > 0 AND s.asset IS NULL`,
+  );
+  const batch = Math.min(LISTING_SWEEP_MAX, Math.max(LISTING_SWEEP_BATCH, unswept?.n ?? 0));
+
+  // NULLs first: an asset with no sweep on record is asked about before one
+  // that was current a few minutes ago.
+  const due = await q<{ asset: string; asset_id: string; divisible: number | null }>(
+    db,
+    `SELECT c.asset, MAX(c.asset_id) AS asset_id, MAX(c.divisible) AS divisible
+       FROM counters c
+       LEFT JOIN listing_sweeps s ON s.asset = c.asset
+      WHERE c.is_pointer_like = 0 AND c.size > 0
+      GROUP BY c.asset
+      ORDER BY COALESCE(s.checked_at, 0) ASC, c.asset ASC
+      LIMIT ?1`,
+    batch,
+  );
+  if (due.length === 0) return { listings: 0, swept: 0 };
+
+  const now = Math.floor(Date.now() / 1000);
+  const writes: D1PreparedStatement[] = [];
+  let count = 0;
+
+  for (let i = 0; i < due.length; i += LISTING_CONCURRENCY) {
+    const slice = due.slice(i, i + LISTING_CONCURRENCY);
+    const results = await Promise.all(
+      slice.map(async (row) => {
+        const divisible = row.divisible === null ? true : row.divisible === 1;
+        // Core is asked by the ledger's name and answers in it; the rows are
+        // stored under the counter's own, which is what every join against
+        // `counters` uses. For anything but a subasset the two are the same.
+        const ledgerName = ledgerAssetName(row);
+        // A node that answers one route and not the other must not wipe the
+        // half it did answer, so a failure on either side skips the asset
+        // entirely and leaves its timestamp alone for the next tick.
+        try {
+          const [orders, dispensers] = await Promise.all([
+            cp.assetOrders(ledgerName),
+            cp.assetDispensers(ledgerName),
+          ]);
+          const listings = [
+            ...orders.map((o) => listingFromOrder(o, ledgerName, divisible)),
+            ...dispensers.map((d) => listingFromDispenser(d, divisible)),
+          ]
+            .filter((l): l is Listing => l !== null)
+            .map((l) => ({ ...l, token_asset: row.asset }));
+          return { asset: row.asset, listings };
+        } catch {
+          return null;
+        }
+      }),
+    );
+
+    for (const result of results) {
+      if (!result) continue;
+      // Replace rather than merge: what upstream no longer reports as open is
+      // no longer an offer, and a stale ask is worse than none.
+      writes.push(
+        db.prepare(`DELETE FROM listings WHERE token_asset = ?1`).bind(result.asset),
+      );
+      for (const listing of result.listings) {
+        count += 1;
+        writes.push(
+          db
+            .prepare(
+              `INSERT INTO listings (
+                 id, kind, token_asset, side, price, price_asset,
+                 remaining, source, block_index, updated_at
+               ) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)
+               ON CONFLICT(id, token_asset) DO UPDATE SET
+                 price = excluded.price,
+                 price_asset = excluded.price_asset,
+                 remaining = excluded.remaining,
+                 side = excluded.side,
+                 updated_at = excluded.updated_at`,
+            )
+            .bind(
+              listing.id,
+              listing.kind,
+              listing.token_asset,
+              listing.side,
+              listing.price,
+              listing.price_asset,
+              raw(listing.remaining),
+              listing.source,
+              listing.block_index,
+              now,
+            ),
+        );
+      }
+      writes.push(
+        db
+          .prepare(
+            `INSERT INTO listing_sweeps (asset, checked_at) VALUES (?1, ?2)
+             ON CONFLICT(asset) DO UPDATE SET checked_at = excluded.checked_at`,
+          )
+          .bind(result.asset, now),
+      );
+    }
+  }
+
+  if (writes.length > 0) await db.batch(writes);
+  return { listings: count, swept: due.length };
 }
 
 /* -------------------------------------------------------------------- */

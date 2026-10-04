@@ -12,11 +12,15 @@ import {
   counterSiblings,
   counterVisibility,
   heaviestCounters,
+  listingsFor,
   mintingCounters,
   pooledCounters,
   searchCounters,
   stats,
   unpooledCounters,
+  venueCounts,
+  venueOffers,
+  withDelegates,
   type PooledSort,
 } from "#api/queries/counters";
 import { Counterparty } from "#api/upstream/counterparty";
@@ -37,9 +41,15 @@ export function countersRoutes(): ReadApp {
   const app = router();
 
   /**
-   * The home page in one call. Three sections, because they are always
-   * rendered together and three round trips to fill one screen is three
-   * chances for it to arrive in pieces.
+   * The home page in one call. Four lists and the venue counts, because they
+   * fill one screen and five round trips to do it is five chances for it to
+   * arrive in pieces. All three venues come back even though the page shows
+   * one at a time: the offers are a page each, and the counts are what the
+   * toggle states.
+   *
+   * `offers_limit` and `offers_offset` page the DEX and dispenser lists
+   * together. Only one of them is on screen, so one offset is enough, and a
+   * venue shorter than the offset comes back empty rather than wrong.
    */
   app.get("/counters", async (c) => {
     const filter = c.req.query("filter") ?? "all";
@@ -47,18 +57,48 @@ export function countersRoutes(): ReadApp {
     const sort = SORTS.has(sortParam as PooledSort) ? (sortParam as PooledSort) : "liquidity";
     const limit = clamp(Number(c.req.query("limit") ?? 100), 1, 200);
     const before = c.req.query("before") ? Number(c.req.query("before")) : undefined;
+    const offersLimit = clamp(Number(c.req.query("offers_limit") ?? limit), 1, 200);
+    const offersOffset = clamp(Number(c.req.query("offers_offset") ?? 0), 0, 100_000);
 
-    if (filter === "pooled") return J(c, { result: await pooledCounters(c.env.DB, sort, limit) });
-    if (filter === "unpooled") return J(c, { result: await unpooledCounters(c.env.DB, limit, before) });
-    if (filter === "minting") return J(c, { result: await mintingCounters(c.env.DB, limit) });
-    if (filter === "heaviest") return J(c, { result: await heaviestCounters(c.env.DB, limit) });
+    // Every list of counters leaves with its delegates attached, so a card
+    // anywhere shows an edition as the file it renders.
+    const db = c.env.DB;
+    const list = async <T extends { number: number }>(rows: Promise<T[]>) =>
+      J(c, { result: await withDelegates(db, await rows) });
 
-    const [pooled, minting, unpooled] = await Promise.all([
+    if (filter === "pooled") return list(pooledCounters(db, sort, limit));
+    if (filter === "unpooled") return list(unpooledCounters(db, limit, before));
+    if (filter === "minting") return list(mintingCounters(db, limit));
+    if (filter === "dex") return list(venueOffers(db, "order", offersLimit, offersOffset));
+    if (filter === "dispensers") return list(venueOffers(db, "dispenser", offersLimit, offersOffset));
+    if (filter === "heaviest") return list(heaviestCounters(db, limit));
+
+    // The offer venues are read apart from the pools, and allowed to fail
+    // apart from them. They come from a table a deploy can be ahead of — the
+    // code arrives by git, the migration by hand — and a home page with no
+    // offers is a smaller failure than a home page with nothing on it.
+    const [pooled, minting, offers] = await Promise.all([
       pooledCounters(c.env.DB, sort, limit),
       mintingCounters(c.env.DB, 50),
-      unpooledCounters(c.env.DB, limit, before),
+      Promise.all([
+        venueOffers(c.env.DB, "order", offersLimit, offersOffset),
+        venueOffers(c.env.DB, "dispenser", offersLimit, offersOffset),
+        venueCounts(c.env.DB),
+      ]).catch((cause) => {
+        console.error("[read] offers unavailable:", (cause as Error).message);
+        return null;
+      }),
     ]);
-    return J(c, { result: { pooled, minting, unpooled } });
+    const [dex, dispensers, counts] = offers ?? [[], [], { pool: pooled.length, dex: 0, dispenser: 0 }];
+    return J(c, {
+      result: {
+        pooled: await withDelegates(db, pooled),
+        dex: await withDelegates(db, dex),
+        dispensers: await withDelegates(db, dispensers),
+        minting: await withDelegates(db, minting),
+        counts,
+      },
+    });
   });
 
   app.get("/stats", async (c) => J(c, { result: await stats(c.env.DB) }, 30));
@@ -106,15 +146,19 @@ export function countersRoutes(): ReadApp {
       return c.json({ error: "not found" }, 404);
     }
 
-    const [pool, siblings, blockTime] = await Promise.all([
+    const [pool, listings, siblings, blockTime] = await Promise.all([
       poolFor(c.env.DB, counter.asset),
+      // As on the home route: no offers rather than no page.
+      listingsFor(c.env.DB, counter.asset).catch(() => []),
       counterSiblings(c.env.DB, counter.asset),
       backfillBlockTime(c.env, counter.number, counter.block_time),
     ]);
 
+    const [withDelegate] = await withDelegates(c.env.DB, [counter]);
+
     return J(
       c,
-      { result: { ...counter, block_time: blockTime, displayable: true, pool, siblings } },
+      { result: { ...withDelegate, block_time: blockTime, displayable: true, pool, listings, siblings } },
       30,
     );
   });

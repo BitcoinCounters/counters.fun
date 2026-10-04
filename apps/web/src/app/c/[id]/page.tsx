@@ -2,13 +2,14 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { renderMode } from "@counters/core/counter";
-import { getCounter, getPool, isDisplayable } from "@/lib/api";
+import { getCounter, getPool, isDisplayable, type Listing } from "@/lib/api";
 import { copy } from "@content/copy";
 import { CounterContent } from "@/components/counter-content";
 import { SwapPanel } from "@/components/swap-panel";
 import { LaunchpadTag } from "@/components/launchpad-tag";
 import { Meter } from "@/components/meter";
 import {
+  fmtAsk,
   fmtCompact,
   fmtDate,
   fmtPct,
@@ -28,6 +29,7 @@ import {
   mempoolBlockUrl,
   mempoolTxUrl,
   stampUrl,
+  xcpAssetUrl,
 } from "@/lib/constants";
 import { big } from "@counters/core/numeric";
 
@@ -144,6 +146,7 @@ export default async function CounterPage({ params }: { params: Promise<{ id: st
               isPointerLike={false}
               stampMime={counter.stamp_mime}
               body={counter.body}
+              delegate={counter.delegate}
               interactive
             />
           </div>
@@ -171,6 +174,16 @@ export default async function CounterPage({ params }: { params: Promise<{ id: st
             <PoolPanel pool={pool} change={change} asset={counter.asset} divisible={counter.divisible === 1} />
           ) : (
             <NoPoolPanel asset={counter.asset} />
+          )}
+
+          {/* Under whichever pool panel applied, because it is the weaker
+              offer of the two and a counter can have both. */}
+          {counter.listings.length > 0 && (
+            <OffersPanel
+              listings={counter.listings}
+              asset={counter.asset}
+              divisible={counter.divisible === 1}
+            />
           )}
 
           <Facts
@@ -316,6 +329,86 @@ function NoPoolPanel({ asset }: { asset: string }) {
       >
         create the pool
       </Link>
+    </div>
+  );
+}
+
+/** How many offers the panel lists before it says how many more there are. */
+const OFFERS_SHOWN = 12;
+
+/**
+ * Open orders and dispensers on this counter.
+ *
+ * Every price here carries its own unit. A dispenser is denominated in BTC, an
+ * order in whatever its maker picked, and the pool panel above is in XCP —
+ * three units on one screen, none of them converted into the others, because
+ * the rate that would do it is not on this chain.
+ */
+function OffersPanel({
+  listings,
+  asset,
+  divisible,
+}: {
+  listings: Listing[];
+  asset: string;
+  divisible: boolean;
+}) {
+  // Asks come first and cheapest first, so the cut keeps what a buyer came
+  // for. RARE.PEPE is wanted by 268 open orders; all of them here would be a
+  // panel four screens tall above the facts it sits on.
+  const shown = listings.slice(0, OFFERS_SHOWN);
+
+  return (
+    <div className="rounded-2xl border border-line bg-card p-5">
+      <div className="mb-4 flex items-baseline justify-between">
+        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-faint">
+          {copy.counter.offers.label}
+        </span>
+        <span className="font-mono text-[11px] text-faint">
+          {copy.counter.offers.meta(listings.length)}
+        </span>
+      </div>
+
+      <div className="flex flex-col">
+        {shown.map((listing) => (
+          <div
+            key={listing.id}
+            className="flex items-baseline justify-between gap-3 border-b border-line2 py-2 last:border-b-0"
+          >
+            <span className="font-mono text-[10px] uppercase tracking-wider text-faint">
+              {listing.kind === "dispenser"
+                ? copy.counter.offers.dispenser
+                : listing.side === "ask"
+                  ? copy.counter.offers.ask
+                  : copy.counter.offers.bid}
+            </span>
+            <span className="flex items-baseline gap-3">
+              <span className="font-mono text-[11px] text-dim">
+                {fmtCompact(listing.remaining, divisible)}
+              </span>
+              <span className="font-mono text-[12px] text-ink">
+                {fmtAsk(listing.price, listing.price_asset)}
+              </span>
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {listings.length > shown.length && (
+        <p className="mt-2 font-mono text-[11px] text-faint">
+          {copy.counter.offers.more(listings.length - shown.length)}
+        </p>
+      )}
+
+      <p className="mt-3 max-w-[52ch] text-xs text-faint">{copy.counter.offers.note}</p>
+      <a
+        href={xcpAssetUrl(asset)}
+        target="_blank"
+        rel="noreferrer"
+        className="mt-2 inline-block font-mono text-[11px] text-copper underline-offset-2 hover:underline"
+      >
+        {copy.counter.offers.venue} →
+      </a>
     </div>
   );
 }
