@@ -2,7 +2,7 @@
 /**
  * Run counters.fun locally: the API worker, the web app, and a sync loop.
  *
- * Three things have to be true for the site to work, and running them by hand
+ * Four things have to be true for the site to work, and running them by hand
  * gets one of them wrong every time:
  *
  * 1. **The API worker is up before the web app renders.** The home page fetches
@@ -12,7 +12,10 @@
  *    content proxy's `frame-ancestors`; a mismatch silently stops HTML and
  *    JavaScript counters from rendering, and looks exactly like a broken
  *    renderer rather than a policy difference.
- * 3. **Something drives the cron.** `wrangler dev` registers the scheduled
+ * 3. **The database has every migration.** Code arrives by `git pull` and a
+ *    migration does not apply itself; a worker reading a table that is not
+ *    there yet answers 500 and the home page renders empty.
+ * 4. **Something drives the cron.** `wrangler dev` registers the scheduled
  *    handler but never fires it on a timer, so a local index freezes at
  *    whatever it held when you last ran a sync. This pokes it.
  *
@@ -129,6 +132,19 @@ function shutdown() {
 // --------------------------------------------------------------------------
 
 alignDevVars();
+
+// Before the worker starts, so no request ever meets a schema older than the
+// code. Applying nothing is a no-op, and a failure here is reported and not
+// fatal: the reads that need a new table degrade, the rest of the site runs.
+await new Promise((resolve) => {
+  run(
+    "migrate",
+    "npx",
+    ["wrangler", "d1", "migrations", "apply", "counters-db", "--local"],
+    join(ROOT, "apps/api"),
+    { CI: "true" },
+  ).on("exit", resolve);
+});
 
 run("api", "npx", ["wrangler", "dev", "--port", String(API_PORT)], join(ROOT, "apps/api"));
 await waitFor(`http://127.0.0.1:${API_PORT}/`, "api");

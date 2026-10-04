@@ -9,6 +9,7 @@
 
 import { parseJsonLossless } from "@counters/core/numeric";
 import type { Fairminter } from "@counters/core/fairminter";
+import type { DispenserRow, OrderRow } from "@counters/core/listing";
 import type { Pool } from "@counters/core/pool";
 
 interface Envelope<T> {
@@ -40,6 +41,28 @@ export interface PriceHistoryEntry {
   reserve_b: string | number;
   price?: number;
 }
+
+/** One ledger event, as `/v2/blocks/<n>/events` returns it. */
+export interface MarketEvent {
+  event: string;
+  params: Record<string, unknown>;
+}
+
+/** Every event after which an asset's open offers may read differently. */
+const MARKET_EVENTS = [
+  "OPEN_ORDER",
+  "ORDER_UPDATE",
+  "ORDER_FILLED",
+  "ORDER_MATCH",
+  "ORDER_MATCH_UPDATE",
+  "ORDER_EXPIRATION",
+  "ORDER_MATCH_EXPIRATION",
+  "CANCEL_ORDER",
+  "OPEN_DISPENSER",
+  "DISPENSER_UPDATE",
+  "REFILL_DISPENSER",
+  "DISPENSE",
+] as const;
 
 export class Counterparty {
   constructor(private readonly base: string) {}
@@ -124,6 +147,71 @@ export class Counterparty {
       all.push(...page);
       if (page.length < PAGE) return all;
     }
+  }
+
+  /**
+   * Every page of a route, following Core's cursor. Bounded, so a route that
+   * never stops handing out cursors cannot turn one call into a hundred.
+   */
+  private async pages<T>(path: string, limit: number, maxPages = 10): Promise<T[]> {
+    const out: T[] = [];
+    let cursor: string | number | null | undefined;
+    for (let i = 0; i < maxPages; i += 1) {
+      const body = await this.get<T[]>(
+        `${path}&limit=${limit}${cursor != null ? `&cursor=${cursor}` : ""}`,
+      );
+      out.push(...(body.result ?? []));
+      cursor = body.next_cursor;
+      if (cursor == null) break;
+    }
+    return out;
+  }
+
+  /**
+   * One asset's open orders, both sides of the book.
+   *
+   * `asset` is the ledger's name for it — see `ledgerAssetName`. Asked by a
+   * subasset's dotted name, Core answers with an empty list, not an error.
+   *
+   * Per asset rather than chain-wide on purpose: `/v2/orders?status=open`
+   * answers with ~2,600 rows and `/v2/dispensers?status=open` with ~26,000,
+   * of which a handful concern counters. Asking about the asset we care
+   * about costs one small response instead of thirty large ones.
+   *
+   * Paged, because one asset's book is not always small: RARE.PEPE is the
+   * get side of 268 open orders, and the first hundred of them is not the
+   * book. Verbose, so the other side of a pair comes with its longname and a
+   * price can be labelled RARE.PEPE rather than A8964522775354514455.
+   */
+  assetOrders(asset: string, limit = 500): Promise<OrderRow[]> {
+    return this.pages<OrderRow>(
+      `/v2/assets/${encodeURIComponent(asset)}/orders?status=open&verbose=true`,
+      limit,
+    );
+  }
+
+  /** One asset's open dispensers, by its ledger name. */
+  assetDispensers(asset: string, limit = 500): Promise<DispenserRow[]> {
+    return this.pages<DispenserRow>(
+      `/v2/assets/${encodeURIComponent(asset)}/dispensers?status=open`,
+      limit,
+    );
+  }
+
+  /**
+   * Everything in one block that opened, changed or closed an order or a
+   * dispenser.
+   *
+   * Filtered by name on the node: a busy block is over a megabyte of events
+   * and all but a few of them are sends and credits. The params are returned
+   * as Core recorded them — assets by their ledger names, orders and
+   * dispensers by tx hash — and the caller only looks for names it knows.
+   */
+  blockMarketEvents(blockIndex: number): Promise<MarketEvent[]> {
+    return this.pages<MarketEvent>(
+      `/v2/blocks/${blockIndex}/events?event_name=${MARKET_EVENTS.join(",")}`,
+      1000,
+    );
   }
 
   /** Holders of an asset — used to prove an LP balance sits at the burn address. */

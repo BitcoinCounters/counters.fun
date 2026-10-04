@@ -35,6 +35,20 @@ export interface CounterRow {
   block_time: number | null;
   /** "xcp.fun" when the deploy came through that launchpad. */
   launchpad: string | null;
+  /**
+   * Set when this counter renders another counter's file instead of its own
+   * body — RARE.PEPE.5 is 1 KB of JSON naming #219's SVG and `edition-5`.
+   * The fields are the *target's*; `fragment` goes on the URL of its file.
+   * Absent on payloads from before the API carried it.
+   */
+  delegate?: Delegate | null;
+}
+
+export interface Delegate {
+  number: number;
+  content_type: string;
+  size: number;
+  fragment: string | null;
 }
 
 export interface PooledCounter extends CounterRow {
@@ -47,6 +61,40 @@ export interface PooledCounter extends CounterRow {
   price_24h_ago: number | null;
   volume_24h: string | null;
   pool_block_index: number;
+}
+
+/**
+ * One open offer — a DEX order or a dispenser — with the counter it is on.
+ * `offer_asset` is the unit the price is in: XCP for most orders, BTC for
+ * every dispenser, and whatever a maker chose otherwise. Nothing converts
+ * between them.
+ */
+export interface Offer extends CounterRow {
+  /** The order's or dispenser's own tx hash. */
+  offer_id: string;
+  offer_kind: "order" | "dispenser";
+  /** `ask` when the counter is being sold, `bid` when it is wanted. */
+  offer_side: "ask" | "bid";
+  offer_price: number;
+  offer_asset: string;
+  offer_remaining: string | null;
+  offer_source: string | null;
+  offer_block: number;
+  /** 1 when the counter also has a pool — it appears under both venues. */
+  has_pool: number;
+}
+
+/** One open offer on a counter, as the detail route returns it. */
+export interface Listing {
+  id: string;
+  kind: "order" | "dispenser";
+  token_asset: string;
+  side: "ask" | "bid";
+  price: number;
+  price_asset: string;
+  remaining: string | null;
+  source: string | null;
+  block_index: number;
 }
 
 export interface MintingCounter extends CounterRow {
@@ -95,6 +143,8 @@ export interface UndisplayableCounter {
 export interface CounterDetail extends CounterRow {
   displayable: true;
   pool: Omit<PoolDetail, "lp_supply" | "lp_locked" | "fully_locked"> | null;
+  /** Open orders and dispensers on this counter, asks first. */
+  listings: Listing[];
   siblings: CounterRow[];
 }
 
@@ -102,6 +152,7 @@ export interface Stats {
   counters_total: number;
   counters_on_chain: number;
   pooled: number;
+  listed: number;
   minting: number;
   bytes_on_chain: number;
   tip: number;
@@ -111,8 +162,13 @@ export interface Stats {
 
 export interface HomeData {
   pooled: PooledCounter[];
+  /** One page of open DEX orders, newest first. */
+  dex: Offer[];
+  /** One page of open dispensers, newest first. */
+  dispensers: Offer[];
   minting: MintingCounter[];
-  unpooled: CounterRow[];
+  /** How much is on each venue in all — the lists above are pages of it. */
+  counts: { pool: number; dex: number; dispenser: number };
 }
 
 async function read<T>(path: string, revalidate = 30): Promise<T> {
@@ -141,12 +197,19 @@ async function readOr<T>(path: string, fallback: T, revalidate = 30): Promise<T>
   }
 }
 
-const NO_COUNTERS: HomeData = { pooled: [], minting: [], unpooled: [] };
+const NO_COUNTERS: HomeData = {
+  pooled: [],
+  dex: [],
+  dispensers: [],
+  minting: [],
+  counts: { pool: 0, dex: 0, dispenser: 0 },
+};
 
 const NO_STATS: Stats = {
   counters_total: 0,
   counters_on_chain: 0,
   pooled: 0,
+  listed: 0,
   minting: 0,
   bytes_on_chain: 0,
   tip: 0,
@@ -154,13 +217,34 @@ const NO_STATS: Stats = {
   synced_at: 0,
 };
 
-export const getHome = (sort = "liquidity") =>
-  readOr<HomeData>(`/counters?sort=${encodeURIComponent(sort)}`, NO_COUNTERS);
+/** Offers per page on the DEX and dispenser venues. */
+export const OFFERS_PAGE = 50;
+
+/**
+ * Spread over the empty shape, so a list the payload does not have reads as
+ * empty rather than undefined. The API and this app deploy separately and the
+ * fetch cache outlives a deploy: for thirty seconds after `dex` and
+ * `dispensers` were added, the page was handed a payload from before they
+ * existed and threw on `.length`.
+ */
+export const getHome = async (sort = "liquidity", offersOffset = 0): Promise<HomeData> => ({
+  ...NO_COUNTERS,
+  ...(await readOr<Partial<HomeData>>(
+    `/counters?sort=${encodeURIComponent(sort)}&offers_limit=${OFFERS_PAGE}&offers_offset=${offersOffset}`,
+    NO_COUNTERS,
+  )),
+});
 
 export const getStats = () => readOr<Stats>("/stats", NO_STATS);
 
-export const getCounter = (id: string) =>
-  read<CounterDetail | UndisplayableCounter>(`/counters/${encodeURIComponent(id)}`);
+/** `listings` defaults for the same reason `getHome` spreads: a detail
+ *  payload cached from before the field existed does not carry it. */
+export const getCounter = async (id: string): Promise<CounterDetail | UndisplayableCounter> => {
+  const counter = await read<CounterDetail | UndisplayableCounter>(
+    `/counters/${encodeURIComponent(id)}`,
+  );
+  return counter.displayable ? { ...counter, listings: counter.listings ?? [] } : counter;
+};
 
 export const getPool = (id: string) =>
   read<PoolDetail | null>(`/counters/${encodeURIComponent(id)}/pool`);

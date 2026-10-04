@@ -29,7 +29,11 @@ async function json(path) {
 }
 
 const counters = await json(`/counters?cb=${Date.now()}`);
-const all = [...counters.pooled, ...counters.minting, ...counters.unpooled];
+// The home page no longer lists counters without a pool, but the route that
+// does is still served and is the widest read of the index there is.
+const unpooled = await json(`/counters?filter=unpooled&cb=${Date.now()}`);
+const listed = [...counters.dex, ...counters.dispensers];
+const all = [...counters.pooled, ...listed, ...counters.minting, ...unpooled];
 
 check(
   "no route returns an off-chain pointer",
@@ -39,6 +43,31 @@ check(
 check(
   "no route returns an empty counter",
   all.every((c) => c.size > 0),
+);
+
+// Every offer states a price and the unit it is in. A price with no
+// denomination would render as a bare number beside cards that read XCP
+// everywhere else — right-looking and wrong by the BTC/XCP rate.
+check(
+  "every offer carries a price and its unit",
+  listed.every(
+    (o) => Number.isFinite(o.offer_price) && o.offer_price > 0 && typeof o.offer_asset === "string" && o.offer_asset.length > 0,
+  ),
+  `${counters.counts.dex} orders, ${counters.counts.dispenser} dispensers`,
+);
+
+// The venue toggle shows one list or the other, so a row under the wrong one
+// is a dispenser's BTC price sitting among the orders.
+check(
+  "each venue lists only its own kind of offer",
+  counters.dex.every((o) => o.offer_kind === "order") &&
+    counters.dispensers.every((o) => o.offer_kind === "dispenser"),
+);
+
+// An order between two counters is stored on both and listed once.
+check(
+  "no order is listed twice",
+  new Set(counters.dex.map((o) => o.offer_id)).size === counters.dex.length,
 );
 
 const stats = await json(`/stats?cb=${Date.now()}`);
@@ -57,8 +86,8 @@ check(
 
 // The content proxy is the only thing standing between an on-chain program and
 // this origin. A missing CSP here is a live cross-site scripting hole.
-if (counters.pooled.length > 0 || counters.unpooled.length > 0) {
-  const sample = (counters.pooled[0] ?? counters.unpooled[0]).number;
+if (counters.pooled.length > 0 || unpooled.length > 0) {
+  const sample = (counters.pooled[0] ?? unpooled[0]).number;
   const res = await fetch(`${BASE}/content/${sample}`);
   const csp = res.headers.get("content-security-policy") ?? "";
   check("content is served", res.ok, `#${sample} ${res.headers.get("content-type")}`);

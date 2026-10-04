@@ -52,6 +52,44 @@ export interface Counter {
   body: string | null;
   block_time?: number;
   original?: boolean;
+  /**
+   * Set when this counter's body names another counter's event: the explorer
+   * renders that counter's file in its place. `number`, `content_type` and
+   * `size` are the *target's*, and null while the target is not an indexed
+   * counter. `fragment` is appended to the rendered document's URL, so an
+   * SVG that styles itself by `:target` shows the named edition. The rule is
+   * the indexer's (build ref §5.5) and is not re-derived here.
+   */
+  delegate?: {
+    id: string;
+    number: number | null;
+    content_type: string | null;
+    size: number | null;
+    fragment: string | null;
+  } | null;
+}
+
+/* -------------------------------------------------------------------- */
+/* Names                                                                */
+/* -------------------------------------------------------------------- */
+
+/**
+ * The name Counterparty's ledger files an asset under.
+ *
+ * The counters server records a subasset by the name a person reads —
+ * `RARE.PEPE` — and that is what `Counter.asset` holds. The ledger does not:
+ * a subasset *is* a numeric asset, `A` followed by its id, and the dotted
+ * name is a label on it. Every row Core keeps about the asset — an order's
+ * `give_asset`, a dispenser's `asset`, a pool's pair — carries the numeric
+ * name, and `/v2/assets/RARE.PEPE/dispensers` answers with an empty list
+ * rather than an error, which reads exactly like "nothing is for sale".
+ * RARE.PEPE had three open dispensers and 268 open orders the day this was
+ * written, and the site showed none of them.
+ *
+ * A dot is the test because no other asset name can contain one.
+ */
+export function ledgerAssetName(counter: Pick<Counter, "asset" | "asset_id">): string {
+  return counter.asset.includes(".") ? `A${counter.asset_id}` : counter.asset;
 }
 
 /* -------------------------------------------------------------------- */

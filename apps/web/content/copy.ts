@@ -70,6 +70,7 @@ export const copy = {
 
     stats: {
       pooled: "pooled",
+      listed: "listed",
       minting: "minting",
       counters: "counters",
       bytes: "on bitcoin",
@@ -77,10 +78,34 @@ export const copy = {
     /** The line under the stats — the label before the block height. */
     chainLine: "block",
 
+    /** On an order or a dispenser whose counter has a pool as well. */
+    alsoPooled: "also pooled",
+
     /** Labels the listings as a whole, above the first section's heading.
      *  Names the premise rather than a category: everything below this line
      *  is a file that is actually in a Bitcoin block. */
     listingsEyebrow: "fully onchain assets",
+
+    /**
+     * The toggle over the first section: the three venues a counter trades
+     * on, shown one at a time. The values are the `?venue=` a reader can
+     * link to; the first is the default and is left out of the URL.
+     */
+    venues: {
+      label: "venue",
+      options: [
+        { value: "pool", label: "pool" },
+        { value: "dex", label: "dex" },
+        { value: "dispenser", label: "dispenser" },
+      ] as const,
+      /** Under the grid when a venue runs past one page. Newest offers are
+       *  first, so the next page is the older one. */
+      pager: {
+        range: (from: number, to: number, total: number) => `${from}–${to} of ${total}`,
+        newer: "← newer",
+        older: "older →",
+      },
+    },
 
     pooled: {
       title: "Pooled",
@@ -101,13 +126,34 @@ export const copy = {
         ] as const,
       },
     },
+    /**
+     * The other two venues: somebody's standing offer rather than a pool's
+     * quote, one card per open order and one per open dispenser. No meta line
+     * — the toggle already states how many there are on each.
+     */
+    dex: {
+      title: "DEX",
+      empty: "No counter has an open order on the Counterparty DEX right now.",
+      /** The order table's header, and what a row's side is called. */
+      columns: {
+        counter: "counter",
+        side: "side",
+        price: "price",
+        amount: "amount",
+        block: "block",
+        ask: "ask",
+        bid: "bid",
+      },
+    },
+    dispensers: {
+      title: "Dispensers",
+      price: "price",
+      remaining: "remaining",
+      empty: "No counter is in an open dispenser right now.",
+    },
     minting: {
       title: "Minting",
       meta: "all-or-nothing · pool opened by consensus at soft cap",
-    },
-    unpooled: {
-      title: "No pool yet",
-      meta: (count: number) => `${count} on-chain counters without one`,
     },
   },
 
@@ -125,6 +171,24 @@ export const copy = {
       label: "no pool",
       body: "Nobody has opened an XCP pool for this counter. The first deposit sets the price — there is no ratio to match until one exists.",
       cta: "create the pool",
+    },
+
+    /**
+     * Open orders and dispensers, under whichever pool panel applies. Worded
+     * so a reader is not told these are the site's own offers: counters.fun
+     * has no order book and does not take the other side of one.
+     */
+    offers: {
+      label: "open offers",
+      meta: (count: number) => (count === 1 ? "1 on chain" : `${count} on chain`),
+      ask: "ask",
+      bid: "bid",
+      dispenser: "dispenser",
+      /** Said once, under the rows. */
+      note: "Listed on Counterparty by their makers, not by this site. A dispenser vends on payment; an order rests until someone takes it.",
+      /** Under the rows, when there are more offers than the panel lists. */
+      more: (count: number) => `and ${count} more`,
+      venue: "see it on xcp.io",
     },
 
     provenance: {

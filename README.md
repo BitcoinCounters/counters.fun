@@ -42,7 +42,7 @@ on Bitcoin, and that is a different statement to a caller.
 ```
 apps/web/           Next.js 16 + React 19 + Tailwind v4 → OpenNext → Cloudflare Workers
 apps/api/           Hono + D1 + R2 + cron               → Cloudflare Workers
-packages/counters/  shared types, the on-chain predicate, pool + fairminter math
+packages/counters/  shared types, the on-chain predicate, pool + fairminter + listing math
 ```
 
 ### `apps/api` — the join
@@ -54,8 +54,8 @@ into D1 and rolls up depth, 24h volume and price change.
 
 | Route | |
 |---|---|
-| `GET /counters` | the home page in one call: `{ pooled, minting, unpooled }` |
-| `GET /counters/:id` | one counter by number or asset, with its pool and reinscriptions |
+| `GET /counters` | the home page in one call: `{ pooled, dex, dispensers, minting, counts }`. `dex` and `dispensers` are one row per open order / dispenser, paged with `offers_limit` and `offers_offset`; `?filter=` returns one list, including `unpooled` |
+| `GET /counters/:id` | one counter by number or asset, with its pool, open offers and reinscriptions |
 | `GET /counters/:id/pool` | reserves plus the lock proof — what share of LP supply sits at the burn address |
 | `GET /counters/:id/history` | reserve snapshots, for the chart |
 | `GET /activity` | swaps against counter pools |
@@ -73,9 +73,19 @@ the cache is write-once and never invalidated.
 
 ### `apps/web` — the pages
 
-- `/` — Pooled, Minting, and on-chain counters with **no pool yet**. That last
-  section is not filler: with 70 on-chain counters and one pool, it is where
-  the first section comes from.
+- `/` — what can be bought, one venue at a time, then Minting. The first
+  section has a **pool / dex / dispenser** toggle (`?venue=`, pool by
+  default), each segment stating how much is on it. The pool is consensus's
+  quote at any size; the other two are someone's standing offer. **DEX** is a
+  table, one row per open Counterparty order — asks, and bids whose other
+  side is not a counter; **Dispensers** is one card per open dispenser. Both
+  are newest first and paged (`?page=`). A counter with several offers
+  appears once for each, and says *also pooled* when it has a pool. Prices
+  carry their unit, because a dispenser is denominated in BTC and an order in
+  whatever pair its maker chose: #158 GAMESOFTRUMP is asked in BTC, every
+  RARE.PEPE.N in RARE.PEPE. Nothing converts between them. Counters with no
+  pool and no offer are not listed here; search and `/c/[id]` still reach
+  them.
 - `/c/[id]` — the counter itself, its pool, and provenance (sha256, rolling
   hash, block, reveal size, miner fee) verifiable against the chain.
 - `/mint` — three things, one commit/reveal path: a **counter** (a new asset
@@ -139,9 +149,10 @@ npm run local            # dev server + API + a sync loop
 npm run local -- --prod  # production build instead of dev
 ```
 
-`scripts/local.mjs` does the three things that are easy to get wrong by hand:
-waits for the API before the web app renders against it, rewrites
-`apps/api/.dev.vars` so `WEB_ORIGIN` matches the port actually in use, and pokes
+`scripts/local.mjs` does the four things that are easy to get wrong by hand:
+applies any pending D1 migration before the worker starts, waits for the API
+before the web app renders against it, rewrites `apps/api/.dev.vars` so
+`WEB_ORIGIN` matches the port actually in use, and pokes
 the scheduled handler every ten minutes — `wrangler dev` registers the cron but
 never fires it, so a local index otherwise freezes at whatever it last held.
 `npm run sync` forces one.
@@ -220,6 +231,38 @@ mistake becomes a clear error rather than that one.
 - **`soft_cap_deadline_block` is rewritten on a sell-out.** On a `closed`
   fairminter it holds the settlement block, not the composed deadline. A
   countdown may only trust it while the status is `open`.
+- **One order can be two listings.** An order's give and get can both be
+  counters — #4 DUALPEPE is offered for #135 MEMEPOW — which is an ask on one
+  and a bid on the other, from one `tx_hash`. The `listings` table is keyed by
+  `(id, token_asset)` for exactly that: keyed by hash alone, the second write
+  overwrites the first and the offered counter drops out of the section.
+- **A subasset's offers are under its numeric name.** The index calls
+  counter #219 `RARE.PEPE`; the ledger calls it `A8964522775354514455`, and
+  every order, dispenser and pool on it carries that name.
+  `/v2/assets/RARE.PEPE/dispensers` answers with an empty list rather than an
+  error, so asking by the dotted name looks exactly like nothing being for
+  sale. `ledgerAssetName` in `packages/counters` is the translation, and 379
+  of the 538 counters need it. Pools are still joined by the index's name, so
+  a subasset counter's pool would not be found — none has one yet.
+- **A delegate is drawn as its target.** A counter whose body names another
+  counter's event renders that counter's file — RARE.PEPE.1 to .300 are each
+  1 KB of JSON naming #219's SVG and an `#edition-N` fragment the SVG styles
+  itself by. The resolution is the counters server's (`delegate` on a
+  record); the sync stores it in `delegates` and every list of counters
+  leaves the API with it attached. Without it the DEX is three hundred rows
+  that say JSON.
+- **Counter numbers are immutable, and the sync holds the server to it.** The
+  upsert is keyed by number, so a counters server that numbers differently
+  does not fail — it leaves rows with one counter's name and another's supply
+  and file. A walk that puts a different reveal at a stored number writes
+  nothing and logs it (`counters_renumbered` in `chain_state`).
+- **Listings follow blocks, and are re-read rather than replayed.** Each tick
+  asks every block since the last for its order and dispenser events, and any
+  counter one names — by ledger name, or by the hash of an offer already
+  stored — has its whole open set re-read and replaced, so a filled or
+  cancelled offer leaves within a tick of its block. A background pass
+  re-reads the 40 stalest assets a tick regardless (the 417 on-chain counter
+  assets in a little under an hour) to correct anything the events missed.
 - **LP tokens can themselves be counters.** Counter #163 is
   `A18189972090142917414`, MEMENOME's own LP token carrying 30 bytes of text.
 - **Core sorts every pair.** `pools/XCP/MEMENOME` and `pools/MEMENOME/XCP`
