@@ -12,3 +12,7 @@ dist/
 # Signed reveals waiting on their commit to be mined — real transactions,
 # never committed. See apps/web/src/lib/server/reveal-jobs.ts.
 .reveal-jobs/
+
+# never commit a GitHub token
+githubcode.txt
+*.token
