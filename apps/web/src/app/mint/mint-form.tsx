@@ -336,16 +336,18 @@ export function MintForm() {
     };
   }, [route]);
 
-  // Both envelopes mint, and neither is a property of the asset. What changes
-  // with a wallet that reads only ord envelopes is who signs the reveal: the
-  // leaf then names a key of the mint's own, the wallet approves the commit as
-  // the payment it is, and this page signs the reveal itself.
+  // Both envelopes mint, and neither is a property of the asset. But since
+  // Counterparty Core v11.5.0 the reveal must be signed by the source's own
+  // key, and a wallet that reads only ord envelopes cannot sign a native
+  // reveal: this page used to sign it with a key of its own, which the network
+  // now ignores. So that combination does not mint; the notice says why.
   const selfSignedReveal = (wallet.adapter?.capabilities.signsOrdEnvelopeOnly ?? false) && envelope === "counterparty";
 
   const walletError = requiresTaproot(wallet.account);
   const ready =
     wallet.address !== null &&
     walletError === null &&
+    !selfSignedReveal &&
     bytes !== null &&
     !assetError &&
     (mode !== "reinscribe" || (lookup.state === "done" && isMine)) &&
@@ -649,7 +651,7 @@ export function MintForm() {
           <Choice label={copy.mint.envelope.ord} hint={copy.mint.envelope.ordHint} active={envelope === "counterparty/ord"} onClick={() => setEnvelope("counterparty/ord")} />
         </div>
         {selfSignedReveal && (
-          <p className="mt-2 text-[11px] leading-relaxed text-faint">
+          <p className="mt-2 text-[11px] leading-relaxed text-bad">
             {copy.mint.envelope.nativeSelfSigned(wallet.adapter?.name ?? "")}
           </p>
         )}

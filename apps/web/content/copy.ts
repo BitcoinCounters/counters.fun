@@ -369,7 +369,7 @@ export const copy = {
       native: "counterparty native",
       nativeHint: "Counterparty's own envelope. Smaller by a few bytes.",
       nativeSelfSigned: (wallet: string) =>
-        `${wallet} reads ord envelopes only, so it will not be asked to sign the reveal for this one: the envelope names a key made for this mint alone, ${wallet} approves the commit as the payment it is — exact address, exact amount — and this page signs the reveal with that key. The asset, the file and the counter are identical either way.`,
+        `${wallet} reads ord envelopes only, so it cannot sign this reveal — and since Counterparty Core v11.5.0 (block 969,320) the reveal must be signed by your own key, so this page can no longer sign it for you. Choose the counterparty + ord envelope: the asset, the file and the counter are identical either way.`,
     },
     nonStandard:
       "Past the {{STANDARD_WITNESS_LIMIT_WU}} WU standard relay cap. The public network will not carry this reveal at any fee rate, so it goes straight to a miner through Slipstream — which is how the multi-megabyte counters were mined.",
