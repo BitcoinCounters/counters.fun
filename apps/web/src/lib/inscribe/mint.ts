@@ -25,8 +25,8 @@
  * out so it can be stashed somewhere durable first.
  */
 
-import { RawTx, Transaction } from "@scure/btc-signer";
-import { commitEnvelope, bytesToHex, hexToBytes, newRevealKey, reKeyEnvelope, revealKeyFromHex } from "./envelope";
+import { RawTx } from "@scure/btc-signer";
+import { commitEnvelope, bytesToHex, hexToBytes, reKeyEnvelope, revealKeyFromHex } from "./envelope";
 import { encodeContent } from "./content";
 import {
   type ComposeResult,
@@ -35,8 +35,9 @@ import {
   buildRevealPsbt,
   detectOrdEnvelope,
   commitTopUp,
+  coreReveal,
   finalize,
-  signRevealLocally,
+  revealWeightFor,
   unsignedRevealTxid,
 } from "./psbt";
 import { STANDARD_WITNESS_LIMIT_WU } from "@/lib/constants";
@@ -45,7 +46,6 @@ import { randomNumericAsset } from "@counters/core/assetnames";
 import { HARD_MIN_RATE } from "@counters/core/fees";
 import { MAX_WEIGHT, meetsFloor, routeFor } from "@counters/core/slipstream";
 import { handOffReveal, slipstreamRates } from "@/lib/slipstream";
-import { broadcastTransaction } from "@/lib/wallet/broadcast";
 import { fairminterComposeParams, fairminterProblems, type FairminterParams } from "@counters/core/fairminter";
 
 /**
@@ -208,6 +208,11 @@ async function composeMint(req: MintRequest): Promise<{ compose: ComposeResult; 
     // A UTXO carrying an asset balance is not a coin to spend on fees; moving
     // it would move the balance with it.
     exclude_utxos_with_balances: "true",
+    // Core v11.5.0 closes the envelope with a key of the source and checks
+    // the one it is handed against the address. This is the signer's taproot
+    // output key — the key the wallet signs the leaf with — so Core, the
+    // commit and the wallet all name the same key.
+    multisig_pubkey: bytesToHex(req.sourceXOnly),
   };
 
   if (req.mode === "fairminter") {
@@ -268,21 +273,33 @@ export function supplyParams(
 /**
  * The reveal's weight, known before anything is signed.
  *
- * Core's `signed_reveal_rawtransaction` is a complete reveal with its own
- * (discarded) key's signature, and the re-keyed reveal has the same shape —
- * only the 32-byte key inside the leaf changes, never the length. The one
- * byte of difference is the sighash flag: Core signs SIGHASH_DEFAULT (64-byte
- * signature), the wallet signs SIGHASH_ALL (65). So this is exact, not an
- * estimate, and it is what lets a >400k WU reveal be refused before the
- * commit has cost anyone anything.
+ * Core's `reveal_rawtransaction` is the unsigned reveal; the signed one adds
+ * the segwit marker and a three-element witness whose only variable part is
+ * the leaf, and the re-keyed leaf has the same length as Core's — only the
+ * 32-byte key inside it changes. The wallet signs SIGHASH_ALL (65-byte
+ * signature). So this is exact, not an estimate, and it is what lets a >400k
+ * WU reveal be refused before the commit has cost anyone anything.
  */
 export function revealWeightOf(compose: ComposeResult): number {
-  const tx = Transaction.fromRaw(hexToBytes(compose.signed_reveal_rawtransaction!), {
-    allowUnknownInputs: true,
-    allowUnknownOutputs: true,
-    disableScriptCheck: true,
-  });
-  return tx.weight + 1;
+  return revealWeightFor(compose, 65);
+}
+
+/**
+ * A wallet that reads only ord envelopes cannot sign a native reveal, and
+ * since Core v11.5.0 nobody else may: a reveal counts only when its leaf is
+ * signed by a key of the source. The old remedy — a key of this page's own in
+ * the leaf — now produces a reveal the network ignores, so the combination is
+ * refused before anything is composed.
+ */
+export class WalletCannotSignNativeRevealError extends Error {
+  constructor(walletName: string) {
+    super(
+      `${walletName} can only sign the counterparty/ord envelope. Since Counterparty Core v11.5.0 ` +
+        `the reveal must be signed by the source's own key, so this page can no longer sign it on ` +
+        `the wallet's behalf. Choose the counterparty/ord envelope, or a wallet that signs native reveals.`,
+    );
+    this.name = "WalletCannotSignNativeRevealError";
+  }
 }
 
 /* -------------------------------------------------------------------- */
@@ -312,9 +329,16 @@ export async function mintCounter(
   const { compose, asset, lpAsset } = await composeMint(req);
   const fairminter = req.fairminter ? { ...req.fairminter, lpAsset } : undefined;
 
-  if (!compose.envelope_script || !compose.signed_reveal_rawtransaction) {
+  // `coreReveal` refuses the pre-v11.5.0 shape (a node-signed reveal) with a
+  // message naming the outdated node; a missing envelope is the same fault.
+  coreReveal(compose);
+  if (!compose.envelope_script) {
+    throw new Error("Core returned no envelope. The node must be v11.5.0 or newer.");
+  }
+  if (compose.reveal_pubkey && compose.reveal_pubkey.toLowerCase() !== bytesToHex(req.sourceXOnly)) {
     throw new Error(
-      "Core returned no commit/reveal pair. The node must be v11+ with taproot envelopes enabled.",
+      "Core closed the envelope with a key other than the one this wallet signs with; " +
+        "the reveal would be ignored by the network, so nothing was signed.",
     );
   }
 
@@ -361,9 +385,12 @@ export async function mintCounter(
    * here, by the page, with nothing to refuse. The envelope is Core's either
    * way — this changes who can open it, not what it says.
    */
-  const selfSigned = wallet.capabilities.signsOrdEnvelopeOnly && !isOrd;
-  const revealKey = selfSigned ? newRevealKey() : null;
-  const leaf = reKeyEnvelope(hexToBytes(compose.envelope_script), revealKey?.xOnly ?? req.sourceXOnly);
+  if (wallet.capabilities.signsOrdEnvelopeOnly && !isOrd) {
+    throw new WalletCannotSignNativeRevealError(wallet.name);
+  }
+  // Core v11.5.0 already closed the envelope with `sourceXOnly` (it was handed
+  // the key); re-keying is a no-op then, and the safety net otherwise.
+  const leaf = reKeyEnvelope(hexToBytes(compose.envelope_script), req.sourceXOnly);
   const commit = commitEnvelope(leaf);
   const valueDelta = commitTopUp(compose, req.satPerVbyte);
 
@@ -420,14 +447,14 @@ export async function mintCounter(
   // Hand the reveal PSBT out before any money moves. If the caller writes it
   // somewhere durable, a mint is never unrecoverable — the leaf names the
   // user's key, so this PSBT can be re-signed at any point in the future.
-  await onRevealPsbt?.(revealPsbt, plan, revealKey ? bytesToHex(revealKey.privateKey) : undefined);
+  await onRevealPsbt?.(revealPsbt, plan);
 
   onStage?.("broadcasting-commit");
   const commitTxid = await wallet.broadcast(commitFinal.hex);
 
   onStage?.("signing-reveal");
   try {
-    const reveal = await finishReveal(wallet, req.source, revealPsbt, onStage, req.route, asset, revealKey?.privateKey);
+    const reveal = await finishReveal(wallet, req.source, revealPsbt, onStage, req.route, asset);
     onStage?.("done");
     return {
       ...plan,
@@ -467,10 +494,19 @@ export async function finishReveal(
   revealKey?: Uint8Array | string,
 ): Promise<{ txid: string; hex: string; weight: number }> {
   // The reveal is a taproot script-path spend against the tapleaf, signed by
-  // whoever the leaf names: the page when the key is this mint's own, and
-  // otherwise the wallet, which handles `tapLeafScript` in both cases.
+  // the wallet, which handles `tapLeafScript`. A pending mint that stored a key
+  // of this page's own predates Core v11.5.0: its leaf does not name the
+  // source, so finishing it would spend the reveal's fee on a transaction the
+  // network ignores. Refuse, and say why, instead.
   const key = typeof revealKey === "string" ? revealKeyFromHex(revealKey).privateKey : revealKey;
-  const signed = key ? signRevealLocally(revealPsbt, key) : await wallet.signPsbt(revealPsbt, { [source]: [0] });
+  if (key) {
+    throw new Error(
+      "This pending mint's reveal was prepared to be signed by this page rather than by your " +
+        "wallet. Since Counterparty Core v11.5.0 (block 969,320) such a reveal is ignored by the " +
+        "network, so it was not broadcast. The commit's coins stay where they are; start a new mint.",
+    );
+  }
+  const signed = await wallet.signPsbt(revealPsbt, { [source]: [0] });
   const final = finalize(signed);
 
   if (route === "slipstream") {
@@ -494,7 +530,7 @@ export async function finishReveal(
   // reached any mempool — the commit sat mined and unspent while the app
   // reported a finished mint. The node either accepts the bytes or says why,
   // and its "yes" is one this site can see.
-  const txid = key ? await broadcastTransaction(final.hex) : await wallet.broadcast(final.hex);
+  const txid = await wallet.broadcast(final.hex);
   const sent = txid || final.txid;
 
   // And check that the claim is true. A relay's txid is its word, not a fact
@@ -544,10 +580,7 @@ async function sendViaSlipstream(
 
 /** What Core's reveal pays out — everything above it in the commit is fee. */
 function revealOutputTotal(compose: ComposeResult): number {
-  return RawTx.decode(hexToBytes(compose.signed_reveal_rawtransaction!)).outputs.reduce(
-    (sum, o) => sum + Number(o.amount),
-    0,
-  );
+  return coreReveal(compose).tx.outputs.reduce((sum, o) => sum + Number(o.amount), 0);
 }
 
 /**

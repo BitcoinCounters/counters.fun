@@ -18,6 +18,7 @@
  */
 
 import { COUNTERPARTY_API_BASE } from "@/lib/constants";
+import { nodeVersionProblem } from "@/lib/inscribe/node-version";
 
 /** Reads the mint and pool flows need, by path shape. */
 const READ_ALLOWED: RegExp[] = [
@@ -77,9 +78,48 @@ function allowed(path: string[], method: string): boolean {
   return false;
 }
 
+/**
+ * The node's version, as its `/v2/` root reports it, remembered briefly.
+ *
+ * Core checks its own version against the published protocol changes only
+ * when its process starts; a node left running across a release keeps
+ * composing with the old rules and parses the results as valid itself. So
+ * every compose that goes through here is preceded by this check, and a node
+ * older than `MIN_CORE_VERSION` gets a refusal instead of a compose. Cached
+ * for a minute: one extra round trip per compose would be fine, one per
+ * minute is free.
+ */
+let versionCache: { version: string | null; at: number } | null = null;
+
+async function nodeVersion(): Promise<string | null> {
+  const now = Date.now();
+  if (versionCache && now - versionCache.at < 60_000) return versionCache.version;
+  let version: string | null = null;
+  try {
+    const res = await fetch(`${COUNTERPARTY_API_BASE}/`, { headers: { accept: "application/json" } });
+    const body = (await res.json()) as { result?: { version?: string } };
+    version = body.result?.version ?? null;
+  } catch {
+    version = null;
+  }
+  versionCache = { version, at: now };
+  return version;
+}
+
+function isCompose(path: string[]): boolean {
+  return path.length === 4 && path[0] === "addresses" && path[2] === "compose";
+}
+
 async function proxy(request: Request, path: string[]): Promise<Response> {
   if (!allowed(path, request.method)) {
     return Response.json({ error: `not proxied: ${request.method} /${path.join("/")}` }, { status: 403 });
+  }
+  if (request.method === "POST" && isCompose(path)) {
+    const problem = nodeVersionProblem(await nodeVersion());
+    if (problem) {
+      versionCache = null; // re-ask next time; the operator may be upgrading right now
+      return Response.json({ error: `compose refused: ${problem}` }, { status: 503 });
+    }
   }
 
   const incoming = new URL(request.url);
