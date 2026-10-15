@@ -21,6 +21,8 @@ import {
   unpooledCounters,
   venueCounts,
   venueOffers,
+  OFFER_SORTS,
+  type OfferSort,
   withDelegates,
   type PooledSort,
 } from "#api/queries/counters";
@@ -65,6 +67,9 @@ export function countersRoutes(): ReadApp {
     // count include. Every one when unsaid — the page chooses its own
     // default, the API does not.
     const priced = parsePriced(c.req.query("priced"));
+    // `offers_sort=newest|price|number` orders the DEX and dispenser lists.
+    const offersSortParam = c.req.query("offers_sort") ?? "newest";
+    const offersSort: OfferSort = OFFER_SORTS.has(offersSortParam as OfferSort) ? (offersSortParam as OfferSort) : "newest";
 
     // Every list of counters leaves with its delegates attached, so a card
     // anywhere shows an edition as the file it renders.
@@ -75,8 +80,8 @@ export function countersRoutes(): ReadApp {
     if (filter === "pooled") return list(pooledCounters(db, sort, limit));
     if (filter === "unpooled") return list(unpooledCounters(db, limit, before));
     if (filter === "minting") return list(mintingCounters(db, limit));
-    if (filter === "dex") return list(venueOffers(db, "order", offersLimit, offersOffset, priced));
-    if (filter === "dispensers") return list(venueOffers(db, "dispenser", offersLimit, offersOffset));
+    if (filter === "dex") return list(venueOffers(db, "order", offersLimit, offersOffset, priced, offersSort));
+    if (filter === "dispensers") return list(venueOffers(db, "dispenser", offersLimit, offersOffset, undefined, offersSort));
     if (filter === "heaviest") return list(heaviestCounters(db, limit));
 
     // The offer venues are read apart from the pools, and allowed to fail
@@ -87,8 +92,8 @@ export function countersRoutes(): ReadApp {
       pooledCounters(c.env.DB, sort, limit),
       mintingCounters(c.env.DB, 50),
       Promise.all([
-        venueOffers(c.env.DB, "order", offersLimit, offersOffset, priced),
-        venueOffers(c.env.DB, "dispenser", offersLimit, offersOffset),
+        venueOffers(c.env.DB, "order", offersLimit, offersOffset, priced, offersSort),
+        venueOffers(c.env.DB, "dispenser", offersLimit, offersOffset, undefined, offersSort),
         venueCounts(c.env.DB, priced),
       ]).catch((cause) => {
         console.error("[read] offers unavailable:", (cause as Error).message);

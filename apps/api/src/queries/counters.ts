@@ -276,6 +276,23 @@ const OFFERS = `
         AND (l.side = 'ask'
              OR NOT EXISTS (SELECT 1 FROM listings a WHERE a.id = l.id AND a.side = 'ask'))`;
 
+/** How an offer venue is ordered. */
+export type OfferSort = "newest" | "price" | "number";
+export const OFFER_SORTS = new Set<OfferSort>(["newest", "price", "number"]);
+
+/**
+ * Newest first by default: an offer has no depth to rank it by, and the
+ * interesting thing about a listing is that someone just made it. By price,
+ * the denominations a reader can compare come first — XCP, then BTC — each
+ * cheapest first, since nothing converts between them. By number, the
+ * counters' own order.
+ */
+const OFFER_ORDER: Record<OfferSort, string> = {
+  newest: `l.block_index DESC, c.number ASC, l.id ASC`,
+  price: `CASE l.price_asset WHEN 'XCP' THEN 0 WHEN 'BTC' THEN 1 ELSE 2 END, l.price ASC, c.number ASC, l.id ASC`,
+  number: `c.number ASC, l.block_index DESC, l.id ASC`,
+};
+
 /**
  * The venue filter as SQL: which denominations an order may be priced in.
  * Fixed literals only, never a caller's string. Every class, or none named,
@@ -309,6 +326,7 @@ export function venueOffers(
   limit = 100,
   offset = 0,
   priced?: readonly PriceClass[],
+  sort: OfferSort = "newest",
 ): Promise<OfferRow[]> {
   return q<OfferRow>(
     db,
@@ -319,7 +337,7 @@ export function venueOffers(
             l.block_index AS offer_block,
             EXISTS (SELECT 1 FROM pools p WHERE p.token_asset = c.asset) AS has_pool
      ${OFFERS}${kind === "order" ? pricedSql(priced) : ""}
-      ORDER BY l.block_index DESC, c.number ASC, l.id ASC
+      ORDER BY ${OFFER_ORDER[sort]}
       LIMIT ?2 OFFSET ?3`,
     kind,
     limit,
