@@ -54,7 +54,7 @@ into D1 and rolls up depth, 24h volume and price change.
 
 | Route | |
 |---|---|
-| `GET /counters` | the home page in one call: `{ pooled, dex, dispensers, minting, counts }`. `dex` and `dispensers` are one row per open order / dispenser, paged with `offers_limit` and `offers_offset`; `priced=xcp,btc,other` (or `all`, the default) narrows the DEX list and its count to orders in those denominations; `?filter=` returns one list, including `unpooled` |
+| `GET /counters` | the home page in one call: `{ pooled, dex, dispensers, minting, counts }`. `dex` and `dispensers` are one row per open order / dispenser, paged with `offers_limit` and `offers_offset`; `priced=xcp,other` (or `all`, the default) narrows the DEX list and its count to orders priced in XCP, in anything else, or both; `?filter=` returns one list, including `unpooled` |
 | `GET /counters/:id` | one counter by number or asset, with its pool, open offers and reinscriptions |
 | `GET /counters/:id/pool` | reserves plus the lock proof — what share of LP supply sits at the burn address |
 | `GET /counters/:id/history` | reserve snapshots, for the chart |
@@ -85,7 +85,7 @@ the cache is write-once and never invalidated.
   whatever pair its maker chose: #158 GAMESOFTRUMP is asked in BTC, every
   RARE.PEPE.N in RARE.PEPE. Nothing converts between them. The DEX has a
   filter folded behind one word, as the protocol explorer does: which
-  denominations to show orders in (`?priced=xcp,btc,other` or `all`). XCP
+  denominations to show orders in (`?priced=xcp,other` or `all`). XCP
   alone is the default, so the book opens on the orders a reader can rank
   against a pool's quote rather than on the 268 editions priced in their
   parent; the toggle's count and the pager follow it. Counters with no
