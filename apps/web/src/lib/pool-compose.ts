@@ -72,6 +72,11 @@ export function estimateWithdrawXcpFee(address: string): Promise<number> {
 export type ComposedTx = ComposeResult;
 
 const COMMON = {
+  // A pool action may follow one that has not confirmed — a deposit, then
+  // the lock of its LP tokens — so the compose may spend pending change.
+  // Core lists it at zero confirmations; the wallet signs an unconfirmed
+  // input whose parent cannot have attached assets, which none of these can.
+  allow_unconfirmed_inputs: "true",
   exclude_utxos_with_balances: "true",
   verbose: "true",
 };
