@@ -39,6 +39,7 @@ const SORTS = new Set<PooledSort>([
   "change",
   "number",
   "newest",
+  "perkb",
 ]);
 
 export function countersRoutes(): ReadApp {

@@ -35,6 +35,9 @@ export interface CounterRow {
   block_time: number | null;
   /** "xcp.fun" when the deploy came through that launchpad. */
   launchpad: string | null;
+  /** The asset's on-chain bytes over every counter it carries, for price
+   *  per KB. Absent on payloads from before the API carried it. */
+  asset_bytes?: number | null;
   /**
    * Set when this counter renders another counter's file instead of its own
    * body — RARE.PEPE.5 is 1 KB of JSON naming #219's SVG and `edition-5`.

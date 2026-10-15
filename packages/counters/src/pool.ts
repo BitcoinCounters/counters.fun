@@ -201,6 +201,27 @@ export function marketCap(
   return (price * Number(circulating)) / tokenUnit;
 }
 
+/**
+ * What a kilobyte of the file is valued at: the market cap spread over the
+ * bytes the asset carries on chain. One unit is a claim on 1/supply of the
+ * file, so this is price × circulating supply ÷ KB, in the price's own unit
+ * (XCP for a pool or an XCP-priced order, BTC for a dispenser). `bytes` is
+ * the asset's own bytes, summed over every counter it carries — not the file
+ * a delegate renders. Null when there is no price, nothing circulating, or
+ * no bytes. The ORDER BY in `apps/api/src/queries/counters.ts` is this
+ * formula in SQL, as marketcap's is.
+ */
+export function pricePerKb(
+  price: number | null,
+  circulating: bigint,
+  tokenDivisible: boolean,
+  bytes: number | null | undefined,
+): number | null {
+  const cap = marketCap(price, circulating, tokenDivisible);
+  if (cap === null || !bytes || bytes <= 0) return null;
+  return cap / (bytes / 1024);
+}
+
 /** Order a pair the way the API addresses it, with XCP as the quote side. */
 export function pairFor(asset: string): { asset1: string; asset2: string } {
   return { asset1: asset, asset2: "XCP" };

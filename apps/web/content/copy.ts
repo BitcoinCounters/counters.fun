@@ -85,6 +85,8 @@ export const copy = {
 
     /** On an order or a dispenser whose counter has a pool as well. */
     alsoPooled: "also pooled",
+    /** On a card or a row: what a kilobyte of the file is valued at. */
+    perKb: "per KB",
 
     /** Labels the listings as a whole, above the first section's heading.
      *  Names the premise rather than a category: everything below this line
@@ -127,6 +129,7 @@ export const copy = {
         options: [
           { value: "liquidity", label: "liquidity" },
           { value: "marketcap", label: "marketcap" },
+          { value: "perkb", label: "price / KB" },
           { value: "number", label: "counter #" },
         ] as const,
       },
@@ -143,6 +146,7 @@ export const copy = {
         options: [
           { value: "newest", label: "newest" },
           { value: "price", label: "price" },
+          { value: "perkb", label: "price / KB" },
           { value: "number", label: "counter #" },
         ] as const,
       },
@@ -487,6 +491,7 @@ export const copy = {
     summaryListingOnly: (price: string, asset: string) => `Asks ${price} per ${asset}.`,
     figures: {
       price: "price per unit",
+      perKb: "per KB",
       perLot: "per lot",
       remaining: "remaining",
       dispensed: "dispensed",

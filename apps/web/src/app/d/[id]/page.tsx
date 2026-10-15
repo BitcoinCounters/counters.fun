@@ -9,13 +9,15 @@ import {
   unitPrice,
 } from "@counters/core/listing";
 import { big } from "@counters/core/numeric";
+import { circulatingSupply } from "@counters/core/counter";
+import { pricePerKb } from "@counters/core/pool";
 import { getDispenser } from "@/lib/api";
 import { copy } from "@content/copy";
 import { CounterContent } from "@/components/counter-content";
 import { BuyPanel } from "@/components/buy-panel";
 import { Meter } from "@/components/meter";
 import { Fact, Figure } from "@/components/detail-bits";
-import { fmtAsk, fmtCompact, fmtDate, fmtQty, trunc } from "@/lib/format";
+import { fmtAsk, fmtCompact, fmtDate, fmtPerKb, fmtQty, trunc } from "@/lib/format";
 import { SITE_URL, mempoolAddressUrl, mempoolBlockUrl, mempoolTxUrl, xcpAssetUrl } from "@/lib/constants";
 
 export const revalidate = 30;
@@ -78,6 +80,7 @@ export default async function DispenserPage({ params }: { params: Promise<{ id: 
   const operator = live?.origin ?? listing?.source ?? null;
 
   const buyable = open && live !== null && lot !== null && !live.oracle_address;
+  const perKb = pricePerKb(price, circulatingSupply(counter.supply ?? 0, counter.burned), divisible, counter.asset_bytes ?? counter.size);
 
   return (
     <>
@@ -117,8 +120,9 @@ export default async function DispenserPage({ params }: { params: Promise<{ id: 
           </div>
 
           <div className="rounded-2xl border border-line bg-card p-5">
-            <div className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-5">
               <Figure label={t.figures.price} value={fmtAsk(price, "BTC")} />
+              <Figure label={t.figures.perKb} value={fmtPerKb(perKb, "BTC")} tone={perKb === null ? "faint" : "ink"} />
               <Figure label={t.figures.remaining} value={`${fmtQty(remaining, divisible)} ${counter.asset}`} tone={remaining !== null && big(remaining) <= 0n ? "faint" : "ink"} />
               <Figure label={t.figures.dispensed} value={live ? `${live.dispense_count}×` : "—"} />
               <Figure label={t.figures.status} value={statusWord} tone={status === DISPENSER_OPEN ? "good" : status === DISPENSER_CLOSED ? "faint" : "ink"} />

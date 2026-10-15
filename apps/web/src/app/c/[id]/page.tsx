@@ -14,6 +14,7 @@ import {
   fmtCompact,
   fmtDate,
   fmtPct,
+  fmtPerKb,
   fmtPrice,
   fmtQty,
   fmtSize,
@@ -34,6 +35,8 @@ import {
   xcpAssetUrl,
 } from "@/lib/constants";
 import { big } from "@counters/core/numeric";
+import { circulatingSupply } from "@counters/core/counter";
+import { pricePerKb } from "@counters/core/pool";
 
 export const revalidate = 30;
 
@@ -173,7 +176,13 @@ export default async function CounterPage({ params }: { params: Promise<{ id: st
           </div>
 
           {pool ? (
-            <PoolPanel pool={pool} change={change} asset={counter.asset} divisible={counter.divisible === 1} />
+            <PoolPanel
+              pool={pool}
+              change={change}
+              asset={counter.asset}
+              divisible={counter.divisible === 1}
+              perKb={pricePerKb(pool.price, circulatingSupply(counter.supply ?? 0, counter.burned), counter.divisible === 1, counter.asset_bytes ?? counter.size)}
+            />
           ) : (
             <NoPoolPanel asset={counter.asset} />
           )}
@@ -236,11 +245,14 @@ function PoolPanel({
   change,
   asset,
   divisible,
+  perKb,
 }: {
   pool: NonNullable<Awaited<ReturnType<typeof getPool>>>;
   change: number | null;
   asset: string;
   divisible: boolean;
+  /** What a kilobyte of the file is valued at, at this pool's price. */
+  perKb: number | null;
 }) {
   const depth = pool.asset_b === "XCP" ? pool.reserve_b : pool.reserve_a;
   const tokens = pool.asset_b === "XCP" ? pool.reserve_a : pool.reserve_b;
@@ -266,6 +278,7 @@ function PoolPanel({
           tone={change === null ? "faint" : change >= 0 ? "good" : "bad"}
         />
         <Figure label="depth" value={`${fmtCompact(depth)} XCP`} />
+        <Figure label="per KB" value={fmtPerKb(perKb, "XCP")} tone={perKb === null ? "faint" : "ink"} />
         {/* The token side in the token's own units — an indivisible counter's
             raw reserve IS its unit count. */}
         <Figure label="reserve" value={fmtCompact(tokens, divisible)} />

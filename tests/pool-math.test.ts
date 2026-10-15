@@ -17,6 +17,7 @@ import {
   proportionalCounterpart,
   withdrawalShares,
   marketCap,
+  pricePerKb,
 } from "../packages/counters/src/pool";
 import { circulatingSupply } from "../packages/counters/src/counter";
 import { big } from "../packages/counters/src/numeric";
@@ -200,5 +201,25 @@ describe("market cap", () => {
     expect(marketCap(1, 0n, false)).toBeNull();
     // Burned everything: circulating clamps at zero rather than going negative.
     expect(marketCap(1, circulatingSupply("100", "100"), false)).toBeNull();
+  });
+});
+
+
+describe("price per kilobyte", () => {
+  it("spreads the market cap over the asset's bytes", () => {
+    // MEMENOME: 69 KB of JavaScript, 100M divisible units, ~7.27e-6 XCP each
+    // → a 726 XCP market cap over 69 KB ≈ 10.8 XCP per kilobyte.
+    const perKb = pricePerKb(7.267e-6, 100_000_000n * 100_000_000n, true, 69_000);
+    expect(perKb).toBeCloseTo(726.7 / (69_000 / 1024), 0);
+    // GAMESOFTRUMP's dispenser: one indivisible token for 0.03 BTC, supply 1,
+    // 3,000 KB → 0.00001 BTC per kilobyte.
+    expect(pricePerKb(0.03, 1n, false, 3_000 * 1024)).toBeCloseTo(0.00001, 8);
+  });
+
+  it("is null without a price, a supply, or bytes", () => {
+    expect(pricePerKb(null, 100n, false, 1024)).toBeNull();
+    expect(pricePerKb(1, 0n, false, 1024)).toBeNull();
+    expect(pricePerKb(1, 100n, false, 0)).toBeNull();
+    expect(pricePerKb(1, 100n, false, null)).toBeNull();
   });
 });

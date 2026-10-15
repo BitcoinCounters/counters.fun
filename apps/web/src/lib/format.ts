@@ -84,6 +84,22 @@ export function fmtAsk(price: number | null, asset: string): string {
   return `${fmtPrice(price)} ${asset}`;
 }
 
+/**
+ * A price per kilobyte, in the price's own unit: `224.70 XCP / KB`,
+ * `1.23k XCP / KB`, `0.00017 BTC / KB`. Values run from fractions to
+ * thousands, so the scale follows the number; under one it reads as a price
+ * does (satoshi places for BTC).
+ */
+export function fmtPerKb(value: number | null, unit: string): string {
+  if (value === null || !Number.isFinite(value) || value <= 0) return "—";
+  const num =
+    value >= 1e6 ? `${(value / 1e6).toFixed(2)}M`
+    : value >= 1e3 ? `${(value / 1e3).toFixed(2)}k`
+    : value >= 1 ? value.toFixed(2)
+    : fmtAsk(value, unit).slice(0, -(unit.length + 1));
+  return `${num} ${unit} / KB`;
+}
+
 /** Signed percentage change, or null when there is no baseline to compare to. */
 export function pctChange(now: number | null, then: number | null): number | null {
   if (now === null || then === null || then === 0) return null;
