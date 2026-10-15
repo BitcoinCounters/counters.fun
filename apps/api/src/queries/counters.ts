@@ -11,6 +11,7 @@
  */
 
 import { q, one } from "#api/db";
+import { PRICE_CLASSES, type PriceClass } from "@counters/core/listing";
 const query = q;
 
 /** The predicate, named once so a new query cannot spell it differently. */
@@ -276,8 +277,24 @@ const OFFERS = `
              OR NOT EXISTS (SELECT 1 FROM listings a WHERE a.id = l.id AND a.side = 'ask'))`;
 
 /**
+ * The venue filter as SQL: which denominations an order may be priced in.
+ * Fixed literals only, never a caller's string. Every class, or none named,
+ * is no filter at all.
+ */
+function pricedSql(priced?: readonly PriceClass[]): string {
+  if (!priced || PRICE_CLASSES.every((c) => priced.includes(c))) return "";
+  const terms: string[] = [];
+  if (priced.includes("xcp")) terms.push(`l.price_asset = 'XCP'`);
+  if (priced.includes("btc")) terms.push(`l.price_asset = 'BTC'`);
+  if (priced.includes("other")) terms.push(`l.price_asset NOT IN ('XCP', 'BTC')`);
+  return terms.length > 0 ? ` AND (${terms.join(" OR ")})` : "";
+}
+
+/**
  * One venue's open offers — every open DEX order, or every open dispenser —
- * each with the counter it is on.
+ * each with the counter it is on. `priced` narrows the DEX to orders in the
+ * named denominations; a dispenser is always priced in BTC and is never
+ * filtered by it.
  *
  * Per offer rather than per counter: a counter with three dispensers at
  * three prices is three things a buyer can choose between, and picking the
@@ -292,6 +309,7 @@ export function venueOffers(
   kind: "order" | "dispenser",
   limit = 100,
   offset = 0,
+  priced?: readonly PriceClass[],
 ): Promise<OfferRow[]> {
   return q<OfferRow>(
     db,
@@ -301,7 +319,7 @@ export function venueOffers(
             l.remaining AS offer_remaining, l.source AS offer_source,
             l.block_index AS offer_block,
             EXISTS (SELECT 1 FROM pools p WHERE p.token_asset = c.asset) AS has_pool
-     ${OFFERS}
+     ${OFFERS}${kind === "order" ? pricedSql(priced) : ""}
       ORDER BY l.block_index DESC, c.number ASC, l.id ASC
       LIMIT ?2 OFFSET ?3`,
     kind,
@@ -321,7 +339,7 @@ export interface VenueCounts {
  * the lists' lengths because the lists are pages: the DEX has more open
  * orders than one page holds, and "50" on the toggle would be the page size.
  */
-export async function venueCounts(db: D1Database): Promise<VenueCounts> {
+export async function venueCounts(db: D1Database, priced?: readonly PriceClass[]): Promise<VenueCounts> {
   const [pool, dex, dispenser] = await Promise.all([
     one<{ n: number }>(
       db,
@@ -329,7 +347,9 @@ export async function venueCounts(db: D1Database): Promise<VenueCounts> {
          JOIN pools p ON p.token_asset = c.asset
         WHERE ${ON_CHAIN} AND ${ORIGINAL_ONLY}`,
     ),
-    one<{ n: number }>(db, `SELECT COUNT(*) AS n ${OFFERS}`, "order"),
+    // The DEX count follows the filter: it is what the toggle says is there
+    // to see, and the pager's total.
+    one<{ n: number }>(db, `SELECT COUNT(*) AS n ${OFFERS}${pricedSql(priced)}`, "order"),
     one<{ n: number }>(db, `SELECT COUNT(*) AS n ${OFFERS}`, "dispenser"),
   ]);
   return { pool: pool?.n ?? 0, dex: dex?.n ?? 0, dispenser: dispenser?.n ?? 0 };

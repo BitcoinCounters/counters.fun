@@ -5,6 +5,8 @@ import { OrderRows } from "@/components/order-rows";
 import { fmtCompact, fmtSize } from "@/lib/format";
 import { SortSelect } from "@/components/sort-select";
 import { VenueToggle } from "@/components/venue-toggle";
+import { DexFilters } from "@/components/dex-filters";
+import { DEFAULT_PRICED, parsePriced, pricedParam, type PriceClass } from "@counters/core/listing";
 import { copy } from "@content/copy";
 
 export const revalidate = 30;
@@ -36,19 +38,28 @@ const DEFAULT_VENUE = VENUES[0].value;
 export default async function HomePage({
   searchParams,
 }: {
-  searchParams: Promise<{ sort?: string; venue?: string; page?: string }>;
+  searchParams: Promise<{ sort?: string; venue?: string; page?: string; priced?: string }>;
 }) {
   // Anything unrecognised falls back rather than 404s: ?sort=, ?venue= and
   // ?page= are things people edit by hand, and the listing is still correct
   // under the default.
-  const { sort: requested, venue: requestedVenue, page: requestedPage } = await searchParams;
+  const {
+    sort: requested,
+    venue: requestedVenue,
+    page: requestedPage,
+    priced: requestedPriced,
+  } = await searchParams;
   const sort = SORTS.some((o) => o.value === requested) ? requested! : DEFAULT_SORT;
   const venue: Venue = VENUES.find((o) => o.value === requestedVenue)?.value ?? DEFAULT_VENUE;
+  // The DEX filter: which denominations the book shows orders in. XCP alone
+  // unless the URL says otherwise — the orders a reader can rank against a
+  // pool's quote, and not the three hundred editions priced in their parent.
+  const priced: PriceClass[] = parsePriced(requestedPriced, DEFAULT_PRICED);
   // The pool is one list; only the offer venues have pages.
   const page = venue === "pool" ? 1 : Math.min(2_000, Math.max(1, Math.trunc(Number(requestedPage)) || 1));
 
   const [home, stats] = await Promise.all([
-    getHome(sort, (page - 1) * OFFERS_PAGE),
+    getHome(sort, (page - 1) * OFFERS_PAGE, priced),
     getStats(),
   ]);
 
@@ -57,11 +68,15 @@ export default async function HomePage({
   // Defaults stay out of the URL, so the plain home page is still `/`. The
   // sort rides along under the other venues, where it does nothing, so that
   // coming back to the pool finds it as it was left. The page does not ride
-  // along: page three of the DEX is not page three of anything else.
-  const venueHref = (next: Venue, nextPage = 1) => {
+  // along: page three of the DEX is not page three of anything else. The
+  // DEX filter rides along like the sort, so leaving the book and coming
+  // back finds it as it was left.
+  const venueHref = (next: Venue, nextPage = 1, nextPriced: readonly PriceClass[] = priced) => {
     const query = new URLSearchParams();
     if (next !== DEFAULT_VENUE) query.set("venue", next);
     if (sort !== DEFAULT_SORT) query.set("sort", sort);
+    const pricedValue = pricedParam(nextPriced);
+    if (pricedValue !== null) query.set("priced", pricedValue);
     if (nextPage > 1) query.set("page", String(nextPage));
     return query.size > 0 ? `/?${query}` : "/";
   };
@@ -136,9 +151,22 @@ export default async function HomePage({
           eyebrow={copy.home.listingsEyebrow}
           title={offersCopy.title}
           toolbar={toggle}
+          control={
+            venue === "dex" ? (
+              <DexFilters
+                label={copy.home.dex.filters.label}
+                group={copy.home.dex.filters.priced.label}
+                options={copy.home.dex.filters.priced.options}
+                value={priced}
+                href={(classes) => `${venueHref("dex", 1, classes)}#${LISTINGS_ID}`}
+              />
+            ) : undefined
+          }
         >
           {offers.length === 0 ? (
-            <Empty>{offersCopy.empty}</Empty>
+            <Empty>
+              {venue === "dex" && pricedParam(priced) !== "all" ? copy.home.dex.emptyFiltered : offersCopy.empty}
+            </Empty>
           ) : venue === "dex" ? (
             <OrderRows offers={offers} />
           ) : (

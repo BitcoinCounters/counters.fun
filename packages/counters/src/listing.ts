@@ -227,6 +227,73 @@ export function denominationRank(asset: string): number {
   return 2;
 }
 
+/* -------------------------------------------------------------------- */
+/* What an order is priced in                                           */
+/* -------------------------------------------------------------------- */
+
+/**
+ * The DEX venue's filter: which denominations to show orders in.
+ *
+ * Every price on the site is in XCP, and an order priced in XCP is the one a
+ * reader can compare with a pool's quote — so that is what the venue shows
+ * by default. BTC is the other denomination anyone can rank. "Other" is an
+ * order priced in some asset of its maker's choosing — today, 268 orders
+ * offering a RARE.PEPE.N for one RARE.PEPE — real offers, in a unit nobody
+ * can compare, and the bulk of the book; shown when asked for.
+ *
+ * The same three ranks as `denominationRank`, named.
+ */
+export const PRICE_CLASSES = ["xcp", "btc", "other"] as const;
+export type PriceClass = (typeof PRICE_CLASSES)[number];
+
+/** What the venue shows when the URL says nothing: orders priced in XCP. */
+export const DEFAULT_PRICED: readonly PriceClass[] = ["xcp"];
+
+export function priceClass(priceAsset: string): PriceClass {
+  if (priceAsset === "XCP") return "xcp";
+  if (priceAsset === BTC) return "btc";
+  return "other";
+}
+
+/**
+ * The classes a `?priced=` names, in canonical order: a comma list of them,
+ * or `all` for every one. Unknown tokens are dropped; nothing recognised
+ * (or a list that would show nothing) falls back to `fallback` — the page's
+ * default, or every class for an API caller who said nothing.
+ */
+export function parsePriced(
+  param: string | null | undefined,
+  fallback: readonly PriceClass[] = PRICE_CLASSES,
+): PriceClass[] {
+  if (param == null) return [...fallback];
+  if (param.trim().toLowerCase() === "all") return [...PRICE_CLASSES];
+  const named = new Set(param.split(",").map((t) => t.trim().toLowerCase()));
+  const chosen = PRICE_CLASSES.filter((c) => named.has(c));
+  return chosen.length > 0 ? chosen : [...fallback];
+}
+
+/**
+ * The `?priced=` value for a set of classes: absent (null) when it is the
+ * page's default, `all` when it is every class, else the list. The default
+ * stays out of the URL so the plain home page is still `/`.
+ */
+export function pricedParam(classes: readonly PriceClass[]): string | null {
+  const chosen = PRICE_CLASSES.filter((c) => classes.includes(c));
+  if (chosen.length === DEFAULT_PRICED.length && chosen.every((c, i) => c === DEFAULT_PRICED[i])) return null;
+  if (chosen.length === PRICE_CLASSES.length) return "all";
+  return chosen.join(",");
+}
+
+/**
+ * The set after one switch is flipped. Un-ticking the last one does not
+ * show nothing: as on the protocol explorer, no switch ticked means no
+ * filter, and the venue shows every order.
+ */
+export function togglePriced(classes: readonly PriceClass[], flip: PriceClass): PriceClass[] {
+  const next = classes.includes(flip) ? classes.filter((c) => c !== flip) : [...classes, flip];
+  return next.length === 0 ? [...PRICE_CLASSES] : PRICE_CLASSES.filter((c) => next.includes(c));
+}
+
 /**
  * The ask a card should show: cheapest, preferring the denomination a reader
  * can compare. Bids are ignored — a card states what it costs to buy, and a
