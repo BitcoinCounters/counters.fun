@@ -67,6 +67,9 @@ export const NAMED_ASSET_XCP_BURN = 0.5;
 export const STANDARD_WITNESS_LIMIT_WU = 400_000;
 
 export const mempoolTxUrl = (txid: string) => `https://mempool.space/tx/${txid}`;
+export const mempoolAddressUrl = (address: string) => `https://mempool.space/address/${address}`;
+/** A dispenser's own page, by the hash of the transaction that opened it. */
+export const dispenserUrl = (hash: string) => `/d/${hash}`;
 export const mempoolBlockUrl = (height: number) => `https://mempool.space/block/${height}`;
 export const xcpAssetUrl = (asset: string) => `https://www.xcp.io/asset/${asset}`;
 /** The protocol's own explorer — the record of what a counter is. */

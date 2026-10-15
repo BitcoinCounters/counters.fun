@@ -57,6 +57,7 @@ into D1 and rolls up depth, 24h volume and price change.
 | `GET /counters` | the home page in one call: `{ pooled, dex, dispensers, minting, counts }`. `dex` and `dispensers` are one row per open order / dispenser, paged with `offers_limit` and `offers_offset`; `priced=xcp,other` (or `all`, the default) narrows the DEX list and its count to orders priced in XCP, in anything else, or both; `?filter=` returns one list, including `unpooled` |
 | `GET /counters/:id` | one counter by number or asset, with its pool, open offers and reinscriptions |
 | `GET /counters/:id/pool` | reserves plus the lock proof — what share of LP supply sits at the burn address |
+| `GET /dispensers/:hash` | one dispenser: this index's listing, Core's live figures (lot, rate, remaining, dispense count, status), and the counter it vends |
 | `GET /counters/:id/history` | reserve snapshots, for the chart |
 | `GET /activity` | swaps against counter pools |
 | `GET /stats` | index totals and the chain tip |
@@ -93,6 +94,13 @@ the cache is write-once and never invalidated.
   them.
 - `/c/[id]` — the counter itself, its pool, and provenance (sha256, rolling
   hash, block, reveal size, miner fee) verifiable against the chain.
+- `/d/[hash]` — one dispenser, by the hash that opened it: its terms, what is
+  left, how often it has vended, and the buy. A dispenser card and a
+  dispenser row in a counter's offers lead here rather than to the counter,
+  because they are about the offer. The buy composes a Counterparty
+  *dispense* (a bare BTC payment to a dispenser has bought nothing since
+  block 866,000), shows price plus miner fee, and the wallet signs it as a
+  PSBT like everything else.
 - `/mint` — three things, one commit/reveal path: a **counter** (a new asset
   whose description is the file; leave the name empty and a free numeric one
   is drawn client-side — Core never names an asset for you), a

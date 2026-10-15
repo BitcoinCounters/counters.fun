@@ -7,7 +7,7 @@
  * it.
  */
 
-import { parseJsonLossless } from "@counters/core/numeric";
+import { parseJsonLossless, type Raw } from "@counters/core/numeric";
 import type { Fairminter } from "@counters/core/fairminter";
 import type { DispenserRow, OrderRow } from "@counters/core/listing";
 import type { Pool } from "@counters/core/pool";
@@ -63,6 +63,18 @@ const MARKET_EVENTS = [
   "REFILL_DISPENSER",
   "DISPENSE",
 ] as const;
+
+/** A dispenser as `/v2/dispensers/<hash>` reports it, the fields a page shows. */
+export interface DispenserLive extends DispenserRow {
+  escrow_quantity: Raw;
+  give_remaining: Raw;
+  status: number;
+  dispense_count: number;
+  oracle_address: string | null;
+  close_block_index: number | null;
+  block_time: number | null;
+  asset_info?: { asset_longname: string | null; divisible: boolean } | null;
+}
 
 export class Counterparty {
   constructor(private readonly base: string) {}
@@ -191,6 +203,20 @@ export class Counterparty {
   }
 
   /** One asset's open dispensers, by its ledger name. */
+  /**
+   * One dispenser by its own hash, live: the lot, the rate, what is left and
+   * how many times it has vended. Null when Core does not know it, or is
+   * away — the page still has the listing to show.
+   */
+  async dispenser(hash: string): Promise<DispenserLive | null> {
+    try {
+      const body = await this.get<DispenserLive>(`/v2/dispensers/${encodeURIComponent(hash)}?verbose=true`);
+      return body.result ?? null;
+    } catch {
+      return null;
+    }
+  }
+
   assetDispensers(asset: string, limit = 500): Promise<DispenserRow[]> {
     return this.pages<DispenserRow>(
       `/v2/assets/${encodeURIComponent(asset)}/dispensers?status=open`,
