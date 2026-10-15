@@ -127,7 +127,23 @@ export const copy = {
         options: [
           { value: "liquidity", label: "liquidity" },
           { value: "marketcap", label: "marketcap" },
+          { value: "number", label: "counter #" },
+        ] as const,
+      },
+    },
+    /**
+     * The order of the DEX and dispenser lists. Newest first by default; by
+     * price, XCP-priced offers come first, then BTC, each cheapest first —
+     * nothing converts between units. The keys are the API's `offers_sort`
+     * values, carried as `?osort=` so the pool's own sort is kept apart.
+     */
+    offers: {
+      sort: {
+        label: "sort",
+        options: [
           { value: "newest", label: "newest" },
+          { value: "price", label: "price" },
+          { value: "number", label: "counter #" },
         ] as const,
       },
     },

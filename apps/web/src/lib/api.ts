@@ -257,10 +257,12 @@ export const getHome = async (
   sort = "liquidity",
   offersOffset = 0,
   priced?: readonly string[],
+  offersSort = "newest",
 ): Promise<HomeData> => ({
   ...NO_COUNTERS,
   ...(await readOr<Partial<HomeData>>(
     `/counters?sort=${encodeURIComponent(sort)}&offers_limit=${OFFERS_PAGE}&offers_offset=${offersOffset}` +
+      `&offers_sort=${encodeURIComponent(offersSort)}` +
       (priced ? `&priced=${encodeURIComponent(priced.join(","))}` : ""),
     NO_COUNTERS,
   )),

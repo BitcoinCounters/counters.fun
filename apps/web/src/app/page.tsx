@@ -35,10 +35,14 @@ const VENUES = copy.home.venues.options;
 type Venue = (typeof VENUES)[number]["value"];
 const DEFAULT_VENUE = VENUES[0].value;
 
+/** The offer venues' own sort, kept apart from the pool's under `?osort=`. */
+const OFFER_SORTS = copy.home.offers.sort.options;
+const DEFAULT_OFFER_SORT = OFFER_SORTS[0].value;
+
 export default async function HomePage({
   searchParams,
 }: {
-  searchParams: Promise<{ sort?: string; venue?: string; page?: string; priced?: string }>;
+  searchParams: Promise<{ sort?: string; venue?: string; page?: string; priced?: string; osort?: string }>;
 }) {
   // Anything unrecognised falls back rather than 404s: ?sort=, ?venue= and
   // ?page= are things people edit by hand, and the listing is still correct
@@ -48,8 +52,10 @@ export default async function HomePage({
     venue: requestedVenue,
     page: requestedPage,
     priced: requestedPriced,
+    osort: requestedOfferSort,
   } = await searchParams;
   const sort = SORTS.some((o) => o.value === requested) ? requested! : DEFAULT_SORT;
+  const offerSort = OFFER_SORTS.some((o) => o.value === requestedOfferSort) ? requestedOfferSort! : DEFAULT_OFFER_SORT;
   const venue: Venue = VENUES.find((o) => o.value === requestedVenue)?.value ?? DEFAULT_VENUE;
   // The DEX filter: which denominations the book shows orders in. XCP alone
   // unless the URL says otherwise — the orders a reader can rank against a
@@ -59,7 +65,7 @@ export default async function HomePage({
   const page = venue === "pool" ? 1 : Math.min(2_000, Math.max(1, Math.trunc(Number(requestedPage)) || 1));
 
   const [home, stats] = await Promise.all([
-    getHome(sort, (page - 1) * OFFERS_PAGE, priced),
+    getHome(sort, (page - 1) * OFFERS_PAGE, priced, offerSort),
     getStats(),
   ]);
 
@@ -77,6 +83,7 @@ export default async function HomePage({
     if (sort !== DEFAULT_SORT) query.set("sort", sort);
     const pricedValue = pricedParam(nextPriced);
     if (pricedValue !== null) query.set("priced", pricedValue);
+    if (offerSort !== DEFAULT_OFFER_SORT) query.set("osort", offerSort);
     if (nextPage > 1) query.set("page", String(nextPage));
     return query.size > 0 ? `/?${query}` : "/";
   };
@@ -152,15 +159,20 @@ export default async function HomePage({
           title={offersCopy.title}
           toolbar={toggle}
           control={
-            venue === "dex" ? (
-              <DexFilters
-                label={copy.home.dex.filters.label}
-                group={copy.home.dex.filters.priced.label}
-                options={copy.home.dex.filters.priced.options}
-                value={priced}
-                href={(classes) => `${venueHref("dex", 1, classes)}#${LISTINGS_ID}`}
-              />
-            ) : undefined
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+              {venue === "dex" && (
+                <DexFilters
+                  label={copy.home.dex.filters.label}
+                  group={copy.home.dex.filters.priced.label}
+                  options={copy.home.dex.filters.priced.options}
+                  value={priced}
+                  href={(classes) => `${venueHref("dex", 1, classes)}#${LISTINGS_ID}`}
+                />
+              )}
+              {offers.length > 1 && (
+                <SortSelect options={OFFER_SORTS} value={offerSort} label={copy.home.offers.sort.label} param="osort" />
+              )}
+            </div>
           }
         >
           {offers.length === 0 ? (
