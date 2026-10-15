@@ -380,6 +380,17 @@ export function listingsFor(db: D1Database, asset: string): Promise<ListingRow[]
   );
 }
 
+/** One open dispenser's listing by the dispenser's own hash, or null. */
+export function dispenserListing(db: D1Database, hash: string): Promise<ListingRow | null> {
+  return one<ListingRow>(
+    db,
+    `SELECT id, kind, token_asset, side, price, price_asset, remaining, source, block_index
+       FROM listings
+      WHERE id = ?1 AND kind = 'dispenser'`,
+    hash,
+  );
+}
+
 /** In-flight launches whose deploy is itself a counter and which seed a pool. */
 export function mintingCounters(db: D1Database, limit = 50): Promise<MintingCounterRow[]> {
   return q<MintingCounterRow>(

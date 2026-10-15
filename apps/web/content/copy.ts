@@ -33,6 +33,11 @@ export const copy = {
 
     /** What a shared link to one counter says. A counter that trades leads
      *  with what it trades at; one that does not leads with what it is. */
+    dispenser: {
+      title: (asset: string) => `Dispenser · ${asset} — counters.fun`,
+      description: (asset: string, price: string, remaining: string) =>
+        `${asset} at ${price} from a Counterparty dispenser, ${remaining} left. Pay it from your wallet here.`,
+    },
     counter: {
       title: (number: number, asset: string) => `Counter #${number} · ${asset} — counters.fun`,
       pooled: (asset: string, price: string, liquidity: string, size: string, mime: string) =>
@@ -166,6 +171,8 @@ export const copy = {
       title: "Dispensers",
       price: "price",
       remaining: "remaining",
+      /** Under each card: to the dispenser's page, at the buy. */
+      buy: "buy",
       empty: "No counter is in an open dispenser right now.",
     },
     minting: {
@@ -201,6 +208,8 @@ export const copy = {
       ask: "ask",
       bid: "bid",
       dispenser: "dispenser",
+      /** On a dispenser's row: it has a page, with the buy on it. */
+      buy: "buy",
       /** Said once, under the rows. */
       note: "Listed on Counterparty by their makers, not by this site. A dispenser vends on payment; an order rests until someone takes it.",
       /** Under the rows, when there are more offers than the panel lists. */
@@ -448,6 +457,63 @@ export const copy = {
         done: "description locked",
         hint: "A second, tiny transaction. Available once the reveal has confirmed.",
       },
+    },
+  },
+
+  /**
+   * A dispenser's own page. The page is about the offer — its terms, what is
+   * left, and the buy — with the counter beside it for context and a link
+   * to the counter's page for the pool and the provenance.
+   */
+  dispenser: {
+    eyebrow: "dispenser",
+    summary: (lot: string, asset: string, price: string) => `Vends ${lot} ${asset} per payment of ${price}.`,
+    summaryListingOnly: (price: string, asset: string) => `Asks ${price} per ${asset}.`,
+    figures: {
+      price: "price per unit",
+      perLot: "per lot",
+      remaining: "remaining",
+      dispensed: "dispensed",
+      status: "status",
+    },
+    status: { open: "open", closing: "closing", closed: "closed" } as Record<string, string>,
+    facts: {
+      address: "pay to",
+      operator: "operator",
+      lot: "lot size",
+      escrowed: "escrowed at open",
+      opened: "opened at block",
+      closed: "closed at block",
+      hash: "opening tx",
+    },
+    counterLink: (number: number) => `counter #${number} — pool, offers, provenance`,
+    note: "Listed on Counterparty by its operator, not by this site. A dispenser vends on payment: pay its address the price of a lot and consensus delivers the lot in the block the payment confirms in.",
+    closed: "This dispenser is closed. What it still held went back to its operator; nothing can be bought from it.",
+    closing: "This dispenser is closing: it still vends for a few blocks, then returns what is left to its operator.",
+    oracle: "This dispenser's price is set by an oracle in a fiat unit and moves with it. This site does not compose against an oracle price yet; see it on xcp.io.",
+    nodeAway: "The node is not answering, so the lot and its price cannot be read. Try again in a moment.",
+    buy: {
+      label: "buy",
+      lots: "lots",
+      youPay: "you pay",
+      youReceive: "you receive",
+      left: (lots: string) => `${lots} ${lots === "1" ? "lot" : "lots"} left`,
+      soldOut: "nothing left to buy",
+      balance: "balance",
+      short: "not enough",
+      tooMany: (lots: string) => `only ${lots} left`,
+      plainSend:
+        "Paying this address from another wallet buys nothing: since block 866,000 a purchase is a Counterparty dispense message, which this composes and your wallet signs.",
+      cta: "buy",
+      preparing: "composing…",
+      minerFee: "miner fee",
+      total: "total",
+      confirm: (receive: string, asset: string, total: string) =>
+        `Pay ${total} BTC in all for ${receive} ${asset}?`,
+      confirmCta: "pay",
+      receipt: "purchase sent",
+      receiptBody:
+        "The dispenser delivers in the block this confirms in. If someone else's payment empties it first, yours is kept by the dispenser's address — that is how dispensers work, so buy from one with enough left.",
     },
   },
 

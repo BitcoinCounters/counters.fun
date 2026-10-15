@@ -8,6 +8,7 @@ import { CounterContent } from "@/components/counter-content";
 import { SwapPanel } from "@/components/swap-panel";
 import { LaunchpadTag } from "@/components/launchpad-tag";
 import { Meter } from "@/components/meter";
+import { Fact, Facts, Figure, SectionHead } from "@/components/detail-bits";
 import {
   fmtAsk,
   fmtCompact,
@@ -26,6 +27,7 @@ import {
   SITE_URL,
   contentUrl,
   countersExplorerUrl,
+  dispenserUrl,
   mempoolBlockUrl,
   mempoolTxUrl,
   stampUrl,
@@ -370,28 +372,44 @@ function OffersPanel({
       </div>
 
       <div className="flex flex-col">
-        {shown.map((listing) => (
-          <div
-            key={listing.id}
-            className="flex items-baseline justify-between gap-3 border-b border-line2 py-2 last:border-b-0"
-          >
-            <span className="font-mono text-[10px] uppercase tracking-wider text-faint">
-              {listing.kind === "dispenser"
-                ? copy.counter.offers.dispenser
-                : listing.side === "ask"
-                  ? copy.counter.offers.ask
-                  : copy.counter.offers.bid}
-            </span>
-            <span className="flex items-baseline gap-3">
-              <span className="font-mono text-[11px] text-dim">
-                {fmtCompact(listing.remaining, divisible)}
+        {shown.map((listing) => {
+          const row = "flex items-baseline justify-between gap-3 border-b border-line2 py-2 last:border-b-0";
+          const cells = (
+            <>
+              <span className="font-mono text-[10px] uppercase tracking-wider text-faint">
+                {listing.kind === "dispenser"
+                  ? copy.counter.offers.dispenser
+                  : listing.side === "ask"
+                    ? copy.counter.offers.ask
+                    : copy.counter.offers.bid}
               </span>
-              <span className="font-mono text-[12px] text-ink">
-                {fmtAsk(listing.price, listing.price_asset)}
+              <span className="flex items-baseline gap-3">
+                <span className="font-mono text-[11px] text-dim">
+                  {fmtCompact(listing.remaining, divisible)}
+                </span>
+                <span className="font-mono text-[12px] text-ink">
+                  {fmtAsk(listing.price, listing.price_asset)}
+                </span>
+                {listing.kind === "dispenser" && (
+                  <span className="font-mono text-[10px] uppercase tracking-wider text-copper">
+                    {copy.counter.offers.buy} →
+                  </span>
+                )}
               </span>
-            </span>
-          </div>
-        ))}
+            </>
+          );
+          // A dispenser has a page of its own, with the buy on it; an order
+          // is taken elsewhere, so its row stays a row.
+          return listing.kind === "dispenser" ? (
+            <Link key={listing.id} href={dispenserUrl(listing.id)} className={`${row} -mx-2 rounded-md px-2 transition-colors hover:bg-card-hover`}>
+              {cells}
+            </Link>
+          ) : (
+            <div key={listing.id} className={row}>
+              {cells}
+            </div>
+          );
+        })}
       </div>
 
       {listings.length > shown.length && (
@@ -456,81 +474,3 @@ function Provenance({ counter }: { counter: Extract<Awaited<ReturnType<typeof ge
 }
 
 /* -------------------------------------------------------------------- */
-
-function SectionHead({ title, meta }: { title: string; meta?: string }) {
-  return (
-    <div className="mb-4 flex items-baseline gap-3.5">
-      <h2 className="font-mono text-sm font-semibold uppercase tracking-[0.14em]">{title}</h2>
-      <span className="h-px flex-1 bg-line" />
-      {meta && <span className="font-mono text-xs text-faint">{meta}</span>}
-    </div>
-  );
-}
-
-function Figure({
-  label,
-  value,
-  tone = "ink",
-}: {
-  label: string;
-  value: string;
-  tone?: "ink" | "good" | "bad" | "faint";
-}) {
-  const color =
-    tone === "good" ? "text-patina" : tone === "bad" ? "text-bad" : tone === "faint" ? "text-faint" : "text-ink";
-  return (
-    <div>
-      <div className="mb-1 font-mono text-[10px] uppercase tracking-[0.16em] text-faint">
-        {label}
-      </div>
-      <div className={`font-mono text-lg ${color}`}>{value}</div>
-    </div>
-  );
-}
-
-function Facts({ rows }: { rows: [string, string][] }) {
-  return (
-    <div className="rounded-2xl border border-line bg-card p-5">
-      {rows.map(([label, value]) => (
-        <Fact key={label} label={label} value={value} />
-      ))}
-    </div>
-  );
-}
-
-function Fact({
-  label,
-  value,
-  href,
-  mono = false,
-}: {
-  label: string;
-  value: string;
-  href?: string;
-  mono?: boolean;
-}) {
-  const body = (
-    <span className={`${mono ? "break-all font-mono text-[11px]" : "font-mono text-xs"} text-ink`}>
-      {value}
-    </span>
-  );
-  return (
-    <div className="flex items-baseline justify-between gap-4 border-b border-line2 py-2 last:border-0">
-      <span className="flex-shrink-0 font-mono text-[10px] uppercase tracking-[0.14em] text-faint">
-        {label}
-      </span>
-      {href ? (
-        <a
-          href={href}
-          target="_blank"
-          rel="noreferrer noopener"
-          className="text-right underline-offset-2 hover:underline"
-        >
-          {body}
-        </a>
-      ) : (
-        <span className="text-right">{body}</span>
-      )}
-    </div>
-  );
-}

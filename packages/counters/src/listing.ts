@@ -212,6 +212,48 @@ export function listingFromDispenser(
   };
 }
 
+/* -------------------------------------------------------------------- */
+/* Buying from a dispenser                                              */
+/* -------------------------------------------------------------------- */
+
+/** Dispenser status as Core numbers it. */
+export const DISPENSER_OPEN = 0;
+export const DISPENSER_CLOSED = 10;
+export const DISPENSER_CLOSING = 11;
+
+export interface DispenseTerms {
+  lots: bigint;
+  /** Satoshis to pay for `lots`. */
+  pay: bigint;
+  /** Raw units received for them. */
+  receive: bigint;
+  /** Whole lots the dispenser can still vend, or null when unknown. */
+  maxLots: bigint | null;
+}
+
+/**
+ * What `lots` lots cost and deliver. A dispenser vends in lots of
+ * `give_quantity` for `satoshirate` each; a payment short of a lot buys
+ * nothing and one past the last lot is kept, so the only amounts worth
+ * paying are whole multiples. Null for a dispenser with no lot or no price.
+ */
+export function dispenseTerms(
+  dispenser: Pick<DispenserRow, "give_quantity" | "satoshirate" | "give_remaining">,
+  lots: number | bigint,
+): DispenseTerms | null {
+  const lot = big(dispenser.give_quantity);
+  const rate = big(dispenser.satoshirate);
+  if (lot <= 0n || rate <= 0n) return null;
+  const remaining = dispenser.give_remaining == null ? null : big(dispenser.give_remaining);
+  const n = BigInt(lots) < 0n ? 0n : BigInt(lots);
+  return {
+    lots: n,
+    pay: rate * n,
+    receive: lot * n,
+    maxLots: remaining === null ? null : remaining / lot,
+  };
+}
+
 /**
  * How the site ranks denominations when it has to pick one ask to show.
  *

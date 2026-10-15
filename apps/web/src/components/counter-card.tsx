@@ -9,6 +9,7 @@ import { Meter } from "@/components/meter";
 import { mintProgress } from "@counters/core/fairminter";
 import { big } from "@counters/core/numeric";
 import { copy } from "@content/copy";
+import { dispenserUrl } from "@/lib/constants";
 
 /**
  * The card. One shape across every home-page listing, because they are the
@@ -37,16 +38,19 @@ function cardBody(body: string | null): string | null {
 
 function Shell({
   counter,
+  href = `/c/${counter.number}`,
   children,
 }: {
   counter: CounterRow;
+  /** Where the tile leads: the counter, unless the card is about an offer on it. */
+  href?: string;
   children: React.ReactNode;
 }) {
   const badge = sizeBadge(counter.size);
 
   return (
     <Link
-      href={`/c/${counter.number}`}
+      href={href}
       className="holo-border hover-pop group flex flex-col overflow-hidden rounded-2xl"
     >
       <div className="counter-stage aspect-square border-b border-line2 bg-bg2">
@@ -191,9 +195,16 @@ export function MintingCard({ counter, tip }: { counter: MintingCounter; tip: nu
  * venues, which is the truth about it — two different offers on the same
  * counter — rather than a duplicate.
  */
+/**
+ * A dispenser. The tile leads to the dispenser's own page rather than the
+ * counter's — the card is about this offer, and a reader who clicked a
+ * price and a remaining count should land on that, not on a pool panel.
+ * The buy under it goes to the same page, at the buy.
+ */
 export function DispenserCard({ offer }: { offer: Offer }) {
   return (
-    <Shell counter={offer}>
+    <div className="flex flex-col gap-2">
+    <Shell counter={offer} href={dispenserUrl(offer.offer_id)}>
       <div className="flex items-baseline justify-between gap-2 border-t border-line2 pt-2">
         <span className="font-mono text-[10px] uppercase tracking-wider text-faint">
           {copy.home.dispensers.price}
@@ -216,6 +227,13 @@ export function DispenserCard({ offer }: { offer: Offer }) {
         </span>
       )}
     </Shell>
+    <Link
+      href={`${dispenserUrl(offer.offer_id)}#buy`}
+      className="rounded-xl border border-copper bg-copper-ghost px-4 py-2 text-center font-mono text-[11px] uppercase tracking-[0.1em] text-copper2 transition-colors hover:bg-copper hover:text-bg"
+    >
+      {copy.home.dispensers.buy}
+    </Link>
+    </div>
   );
 }
 
