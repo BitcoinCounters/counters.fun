@@ -236,23 +236,20 @@ export function denominationRank(asset: string): number {
  *
  * Every price on the site is in XCP, and an order priced in XCP is the one a
  * reader can compare with a pool's quote — so that is what the venue shows
- * by default. BTC is the other denomination anyone can rank. "Other" is an
- * order priced in some asset of its maker's choosing — today, 268 orders
- * offering a RARE.PEPE.N for one RARE.PEPE — real offers, in a unit nobody
- * can compare, and the bulk of the book; shown when asked for.
- *
- * The same three ranks as `denominationRank`, named.
+ * by default. "Other" is everything else: an order priced in some asset of
+ * its maker's choosing — today, 268 orders offering a RARE.PEPE.N for one
+ * RARE.PEPE — real offers, in a unit nobody can compare, and the bulk of the
+ * book; shown when asked for. BTC-priced orders are among them: a dispenser
+ * is the BTC venue, and an order in BTC is rare enough not to earn a switch.
  */
-export const PRICE_CLASSES = ["xcp", "btc", "other"] as const;
+export const PRICE_CLASSES = ["xcp", "other"] as const;
 export type PriceClass = (typeof PRICE_CLASSES)[number];
 
 /** What the venue shows when the URL says nothing: orders priced in XCP. */
 export const DEFAULT_PRICED: readonly PriceClass[] = ["xcp"];
 
 export function priceClass(priceAsset: string): PriceClass {
-  if (priceAsset === "XCP") return "xcp";
-  if (priceAsset === BTC) return "btc";
-  return "other";
+  return priceAsset === "XCP" ? "xcp" : "other";
 }
 
 /**

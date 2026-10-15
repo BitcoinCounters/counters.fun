@@ -285,8 +285,7 @@ function pricedSql(priced?: readonly PriceClass[]): string {
   if (!priced || PRICE_CLASSES.every((c) => priced.includes(c))) return "";
   const terms: string[] = [];
   if (priced.includes("xcp")) terms.push(`l.price_asset = 'XCP'`);
-  if (priced.includes("btc")) terms.push(`l.price_asset = 'BTC'`);
-  if (priced.includes("other")) terms.push(`l.price_asset NOT IN ('XCP', 'BTC')`);
+  if (priced.includes("other")) terms.push(`l.price_asset <> 'XCP'`);
   return terms.length > 0 ? ` AND (${terms.join(" OR ")})` : "";
 }
 

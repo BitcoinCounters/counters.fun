@@ -147,8 +147,7 @@ export const copy = {
           label: "priced in",
           options: [
             { value: "xcp", label: "XCP", title: "orders priced in XCP — comparable with a pool's quote" },
-            { value: "btc", label: "BTC", title: "orders priced in bitcoin" },
-            { value: "other", label: "other", title: "orders priced in some other asset — a RARE.PEPE.N offered for a RARE.PEPE" },
+            { value: "other", label: "all others", title: "orders priced in anything else — a RARE.PEPE.N offered for a RARE.PEPE, or an order in BTC" },
           ] as const,
         },
       },
