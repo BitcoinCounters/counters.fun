@@ -508,6 +508,7 @@ export const copy = {
       preparing: "composing…",
       /** The dialog a card's buy opens. */
       loading: "asking the node for the lot and the rate…",
+      retry: "try again",
       close: "close",
       page: "the dispenser's page",
       minerFee: "miner fee",

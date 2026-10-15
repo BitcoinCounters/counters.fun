@@ -14,7 +14,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ has
     return Response.json({ error: "not found" }, { status: 404 });
   }
   try {
-    const res = await fetch(`${COUNTERS_API_BASE}/dispensers/${hash.toLowerCase()}`, { signal: AbortSignal.timeout(8000) });
+    const res = await fetch(`${COUNTERS_API_BASE}/dispensers/${hash.toLowerCase()}`, { signal: AbortSignal.timeout(15_000) });
     return new Response(await res.text(), {
       status: res.status,
       headers: { "content-type": "application/json", "cache-control": "no-store" },

@@ -31,9 +31,16 @@ export function DispenserBuy({ offer }: { offer: Offer }) {
   const [detail, setDetail] = useState<DispenserDetail | null>(null);
   const [failed, setFailed] = useState(false);
 
+  // Opening asks again if the last look failed: a blip reaching the node
+  // should cost a click, not a page reload.
   const show = useCallback(() => {
+    setFailed(false);
     setOpen(true);
     ref.current?.showModal();
+  }, []);
+  const retry = useCallback(() => {
+    setDetail(null);
+    setFailed(false);
   }, []);
   const hide = useCallback(() => {
     ref.current?.close();
@@ -109,7 +116,14 @@ export function DispenserBuy({ offer }: { offer: Offer }) {
             />
           )}
           {open && !detail && !failed && <p className="text-sm text-dim">{t.buy.loading}</p>}
-          {open && (failed || (detail && !live)) && <p className="text-sm text-dim">{t.nodeAway}</p>}
+          {open && (failed || (detail && !live)) && (
+            <p className="text-sm text-dim">
+              {t.nodeAway}{" "}
+              <button type="button" onClick={retry} className="font-mono text-[11px] uppercase tracking-[0.1em] text-copper2 underline-offset-2 hover:underline">
+                {t.buy.retry}
+              </button>
+            </p>
+          )}
           {open && detail && live && status === DISPENSER_CLOSED && <p className="text-sm text-dim">{t.closed}</p>}
           {open && detail && live && isOpen && live.oracle_address && <p className="text-sm text-dim">{t.oracle}</p>}
 

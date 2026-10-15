@@ -210,7 +210,15 @@ export class Counterparty {
    */
   async dispenser(hash: string): Promise<DispenserLive | null> {
     try {
-      const body = await this.get<DispenserLive>(`/v2/dispensers/${encodeURIComponent(hash)}?verbose=true`);
+      // Its own fetch rather than `get`: a buy is waiting on this answer, so
+      // a node that hangs is given ten seconds and then reported as away,
+      // instead of holding the request until the proxy in front gives up.
+      const res = await fetch(`${this.base}/v2/dispensers/${encodeURIComponent(hash)}?verbose=true`, {
+        headers: { accept: "application/json" },
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!res.ok) return null;
+      const body = parseJsonLossless<Envelope<DispenserLive>>(await res.text());
       return body.result ?? null;
     } catch {
       return null;
