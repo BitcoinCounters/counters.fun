@@ -39,11 +39,14 @@ function cardBody(body: string | null): string | null {
 function Shell({
   counter,
   href = `/c/${counter.number}`,
+  grow = false,
   children,
 }: {
   counter: CounterRow;
   /** Where the tile leads: the counter, unless the card is about an offer on it. */
   href?: string;
+  /** Fill the height given, so what sits under the tile lines up across a row. */
+  grow?: boolean;
   children: React.ReactNode;
 }) {
   const badge = sizeBadge(counter.size);
@@ -51,7 +54,7 @@ function Shell({
   return (
     <Link
       href={href}
-      className="holo-border hover-pop group flex flex-col overflow-hidden rounded-2xl"
+      className={`holo-border hover-pop group flex flex-col overflow-hidden rounded-2xl${grow ? " flex-1" : ""}`}
     >
       <div className="counter-stage aspect-square border-b border-line2 bg-bg2">
         <CounterContent
@@ -202,9 +205,12 @@ export function MintingCard({ counter, tip }: { counter: MintingCounter; tip: nu
  * The buy under it goes to the same page, at the buy.
  */
 export function DispenserCard({ offer }: { offer: Offer }) {
+  // The column fills its grid cell and the tile takes the slack, so a card
+  // with one more line ("also pooled") does not push its buy below the
+  // others in the row.
   return (
-    <div className="flex flex-col gap-2">
-    <Shell counter={offer} href={dispenserUrl(offer.offer_id)}>
+    <div className="flex h-full flex-col gap-2">
+    <Shell counter={offer} href={dispenserUrl(offer.offer_id)} grow>
       <div className="flex items-baseline justify-between gap-2 border-t border-line2 pt-2">
         <span className="font-mono text-[10px] uppercase tracking-wider text-faint">
           {copy.home.dispensers.price}
