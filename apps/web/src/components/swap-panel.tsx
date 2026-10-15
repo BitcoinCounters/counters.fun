@@ -196,6 +196,9 @@ export function SwapPanel({ asset, divisible }: { asset: string; divisible: bool
         expiration: String(expiry),
         fee_required: "0",
         sat_per_vbyte: String(fee.rate ?? 0),
+        // A swap right after another, or after a buy, spends the pending
+        // change rather than waiting a block — see the buy panel.
+        allow_unconfirmed_inputs: "true",
         exclude_utxos_with_balances: "true",
         verbose: "true",
       });
