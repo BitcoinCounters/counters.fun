@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { renderMode } from "@counters/core/counter";
+import { circulatingSupply, renderMode } from "@counters/core/counter";
+import { pricePerKb } from "@counters/core/pool";
 import type { Offer } from "@/lib/api";
 import { contentUrl, stampUrl } from "@/lib/constants";
-import { fmtAsk, fmtCompact, mimeTag, shortMime } from "@/lib/format";
+import { fmtAsk, fmtCompact, fmtPerKb, mimeTag, shortMime } from "@/lib/format";
 import { Meter } from "@/components/meter";
 import { rendered } from "@/components/counter-content";
 import { copy } from "@content/copy";
@@ -59,6 +60,12 @@ export function OrderRows({ offers }: { offers: Offer[] }) {
           </span>
           <span className="truncate text-right font-mono text-[12px] text-ink">
             {fmtAsk(offer.offer_price, offer.offer_asset)}
+            <span className="block truncate text-[10px] text-faint">
+              {fmtPerKb(
+                pricePerKb(offer.offer_price, circulatingSupply(offer.supply ?? 0, offer.burned), offer.divisible === 1, offer.asset_bytes ?? offer.size),
+                offer.offer_asset,
+              )}
+            </span>
           </span>
           <span className="hidden text-right font-mono text-[11px] text-dim sm:block">
             {fmtCompact(offer.offer_remaining, offer.divisible === 1)}

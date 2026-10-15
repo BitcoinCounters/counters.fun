@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { circulatingSupply, sizeBadge } from "@counters/core/counter";
-import { marketCap } from "@counters/core/pool";
+import { marketCap, pricePerKb } from "@counters/core/pool";
 import type { CounterRow, MintingCounter, Offer, PooledCounter } from "@/lib/api";
-import { fmtAsk, fmtBlocks, fmtCompact, fmtPct, fmtPrice, fmtSize, mimeTag, pctChange } from "@/lib/format";
+import { fmtAsk, fmtBlocks, fmtCompact, fmtPct, fmtPerKb, fmtPrice, fmtSize, mimeTag, pctChange } from "@/lib/format";
 import { CounterContent } from "@/components/counter-content";
 import { LaunchpadTag } from "@/components/launchpad-tag";
 import { Meter } from "@/components/meter";
@@ -103,11 +103,9 @@ export function PooledCard({ counter }: { counter: PooledCounter }) {
   // sides are worth the same at the pool's own price, so this is half the
   // pool and the honest half to quote: it is the side you are paid in.
   const liquidity = counter.asset_b === "XCP" ? counter.reserve_b : counter.reserve_a;
-  const mcap = marketCap(
-    counter.price,
-    circulatingSupply(counter.supply ?? 0, counter.burned),
-    counter.divisible !== 0,
-  );
+  const circulating = circulatingSupply(counter.supply ?? 0, counter.burned);
+  const mcap = marketCap(counter.price, circulating, counter.divisible !== 0);
+  const perKb = pricePerKb(counter.price, circulating, counter.divisible !== 0, counter.asset_bytes ?? counter.size);
 
   return (
     <Shell counter={counter}>
@@ -134,6 +132,10 @@ export function PooledCard({ counter }: { counter: PooledCounter }) {
         <span className="font-mono text-[11px] text-ink">
           {mcap === null ? "—" : `${fmtCompact(Math.round(mcap * 1e8))} XCP`}
         </span>
+      </div>
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="font-mono text-[10px] uppercase tracking-wider text-faint">{copy.home.perKb}</span>
+        <span className="font-mono text-[11px] text-dim">{fmtPerKb(perKb, "XCP")}</span>
       </div>
     </Shell>
   );
@@ -226,6 +228,15 @@ export function DispenserCard({ offer }: { offer: Offer }) {
         </span>
         <span className="font-mono text-[11px] text-dim">
           {fmtCompact(offer.offer_remaining, offer.divisible === 1)}
+        </span>
+      </div>
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="font-mono text-[10px] uppercase tracking-wider text-faint">{copy.home.perKb}</span>
+        <span className="font-mono text-[11px] text-dim">
+          {fmtPerKb(
+            pricePerKb(offer.offer_price, circulatingSupply(offer.supply ?? 0, offer.burned), offer.divisible === 1, offer.asset_bytes ?? offer.size),
+            offer.offer_asset,
+          )}
         </span>
       </div>
       {offer.has_pool === 1 && (

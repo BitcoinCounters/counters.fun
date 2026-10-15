@@ -90,9 +90,14 @@ the cache is write-once and never invalidated.
   alone is the default, so the book opens on the orders a reader can rank
   against a pool's quote rather than on the 268 editions priced in their
   parent; the toggle's count and the pager follow it. Both offer venues
-  sort by newest, price or counter number (`?osort=`, the API's
-  `offers_sort`), kept apart from the pool's own `?sort=`; by price, the
-  XCP-priced offers come first, then BTC, each cheapest first. Counters
+  sort by newest, price, price per KB or counter number (`?osort=`, the
+  API's `offers_sort`), kept apart from the pool's own `?sort=`; by price,
+  the XCP-priced offers come first, then BTC, each cheapest first. **Price
+  per KB** is the market cap spread over the bytes the asset carries on
+  chain, summed over every counter on it: price × circulating supply ÷ KB,
+  in the price's own unit. It is on every pooled card, dispenser card and
+  DEX row, on the counter and dispenser pages, and is a sort on all three
+  venues, cheapest first. Counters
   with no pool and no offer are not listed here; search and `/c/[id]`
   still reach them.
 - `/c/[id]` — the counter itself, its pool, and provenance (sha256, rolling

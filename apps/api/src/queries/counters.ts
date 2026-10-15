@@ -61,6 +61,8 @@ export interface CounterRow {
   block_time: number | null;
   /** 'xcp.fun' when the deploy came through that launchpad; see @counters/core/launchpad. */
   launchpad: string | null;
+  /** The asset's on-chain bytes over every counter it carries, for price per KB. */
+  asset_bytes: number;
 }
 
 /** What a delegate renders instead of its own body — see 0004_delegates. */
@@ -142,11 +144,18 @@ export interface MintingCounterRow extends CounterRow {
   earned_quantity: string | null;
 }
 
+/** The bytes an asset carries on chain: every counter on it, summed. A
+ *  reinscribed asset holds all of its inscriptions, and a price per
+ *  kilobyte is over all of them. */
+const ASSET_BYTES = `(SELECT COALESCE(SUM(c2.size), 0) FROM counters c2
+                       WHERE c2.asset = c.asset AND c2.is_pointer_like = 0)`;
+
 const COUNTER_COLUMNS = `
   c.number, c.asset, c.asset_longname, c.kind, c.content_type, c.size,
   c.is_pointer_like, c.stamp_mime, c.owner, c.txid, c.block, c.tx_index, c.sha256,
   c.rolling_hash, c.supply, c.divisible, c.locked, c.burned, c.fee,
-  c.tx_size, c.body, c.block_time, c.launchpad`;
+  c.tx_size, c.body, c.block_time, c.launchpad,
+  ${ASSET_BYTES} AS asset_bytes`;
 
 export type PooledSort =
   | "liquidity"
@@ -154,7 +163,8 @@ export type PooledSort =
   | "volume"
   | "change"
   | "number"
-  | "newest";
+  | "newest"
+  | "perkb";
 
 /** The XCP side of the pair: reserve_b when XCP is asset_b, reserve_a when it
  *  leads. CAST is safe here — pool reserves are well inside 2^63. */
@@ -193,6 +203,12 @@ const POOLED_ORDER: Record<PooledSort, string> = {
                 ELSE (p.price - p.price_24h_ago) / p.price_24h_ago END DESC`,
   number: `c.number ASC`,
   newest: `p.block_index DESC`,
+  // Price per kilobyte, cheapest first: marketcap over the asset's bytes —
+  // pricePerKb in packages/counters/src/pool.ts. No price or no bytes
+  // sorts last, which with ASC means a huge stand-in rather than NULL
+  // (SQLite puts NULL first in an ascending order).
+  perkb: `CASE WHEN p.price IS NULL OR p.price <= 0 OR ${ASSET_BYTES} <= 0 THEN 1e300
+               ELSE (p.price * ${CIRCULATING}) / (${ASSET_BYTES} / 1024.0) END ASC, c.number ASC`,
 };
 
 /** Counters with a live XCP pool — the headline listing. */
@@ -277,8 +293,8 @@ const OFFERS = `
              OR NOT EXISTS (SELECT 1 FROM listings a WHERE a.id = l.id AND a.side = 'ask'))`;
 
 /** How an offer venue is ordered. */
-export type OfferSort = "newest" | "price" | "number";
-export const OFFER_SORTS = new Set<OfferSort>(["newest", "price", "number"]);
+export type OfferSort = "newest" | "price" | "number" | "perkb";
+export const OFFER_SORTS = new Set<OfferSort>(["newest", "price", "number", "perkb"]);
 
 /**
  * Newest first by default: an offer has no depth to rank it by, and the
@@ -291,6 +307,11 @@ const OFFER_ORDER: Record<OfferSort, string> = {
   newest: `l.block_index DESC, c.number ASC, l.id ASC`,
   price: `CASE l.price_asset WHEN 'XCP' THEN 0 WHEN 'BTC' THEN 1 ELSE 2 END, l.price ASC, c.number ASC, l.id ASC`,
   number: `c.number ASC, l.block_index DESC, l.id ASC`,
+  // By the kilobyte, as the pool sort: the comparable denominations first,
+  // then the offer's price × circulating supply over the asset's bytes.
+  perkb: `CASE l.price_asset WHEN 'XCP' THEN 0 WHEN 'BTC' THEN 1 ELSE 2 END,
+          CASE WHEN l.price <= 0 OR ${ASSET_BYTES} <= 0 THEN 1e300
+               ELSE (l.price * ${CIRCULATING}) / (${ASSET_BYTES} / 1024.0) END ASC, c.number ASC, l.id ASC`,
 };
 
 /**
