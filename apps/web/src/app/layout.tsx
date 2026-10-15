@@ -63,6 +63,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <FaviconAnimator />
           <SiteHeader />
           <main className="mx-auto w-full max-w-[1120px] px-5 pb-24">{children}</main>
+          {/* One quiet line so a visitor (or the operator) can tell which build
+              is serving and when it last changed. Values are baked at build. */}
+          <footer className="mx-auto w-full max-w-[1120px] px-5 pb-6 text-center text-[11px] text-neutral-400">
+            v{process.env.NEXT_PUBLIC_APP_VERSION} · {process.env.NEXT_PUBLIC_BUILD_COMMIT} · updated {process.env.NEXT_PUBLIC_BUILD_DATE}
+          </footer>
         </AppProviders>
       </body>
     </html>

@@ -1,8 +1,30 @@
 import type { NextConfig } from "next";
+import { execSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+
+// What is running. Read at build time so the footer can say which commit this
+// is and when it landed — the only way to tell from the page whether a deploy
+// happened. Missing git (a tarball build) degrades to "unknown", never a crash.
+function git(args: string): string {
+  try { return execSync(`git ${args}`, { stdio: ["ignore", "pipe", "ignore"] }).toString().trim(); }
+  catch { return ""; }
+}
+const BUILD_COMMIT = git("rev-parse --short HEAD") || "unknown";
+const BUILD_DATE = git("log -1 --format=%cs") || new Date().toISOString().slice(0, 10);
+const APP_VERSION = (() => {
+  try { return JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8")).version as string; }
+  catch { return "0.0.0"; }
+})();
+
 
 const API = process.env.NEXT_PUBLIC_COUNTERS_API_BASE ?? "http://localhost:8787";
 
 const config: NextConfig = {
+  env: {
+    NEXT_PUBLIC_BUILD_COMMIT: BUILD_COMMIT,
+    NEXT_PUBLIC_BUILD_DATE: BUILD_DATE,
+    NEXT_PUBLIC_APP_VERSION: APP_VERSION,
+  },
   // Dev only: mirror the browser console (errors, warnings, hydration
   // issues — the things the "N issues" overlay counts) into the dev server's
   // output, so they land in the service journal and can be watched from a
