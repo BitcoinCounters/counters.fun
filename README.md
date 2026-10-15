@@ -61,6 +61,7 @@ into D1 and rolls up depth, 24h volume and price change.
 | `GET /activity` | swaps against counter pools |
 | `GET /stats` | index totals and the chain tip |
 | `GET /content/:n`, `/preview/:n` | on-chain bytes, re-served sandboxed |
+| `GET /stamp/:n`, `/icon/:n` | a stamp's decoded image; the icon a counter names (an ordinals inscription the counters server reads out of the reveal witness through its own node — RARE.PEPE editions name a 48×48 PNG each), re-served the same way |
 
 **Why the content proxy exists.** `bitcoincounters.com` sends
 `X-Frame-Options: DENY`. Images are fine in an `<img>`, but the HTML,

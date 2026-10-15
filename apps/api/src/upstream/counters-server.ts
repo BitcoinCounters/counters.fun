@@ -81,6 +81,16 @@ export class CountersServer {
     return this.passthrough(`/content/${n}`, request);
   }
 
+  /**
+   * The icon a counter names: an ordinals inscription's bytes, read by the
+   * server out of the reveal witness through its own node. 404 ("no icon")
+   * for a counter that names none, 415 when what it names is not a small
+   * image.
+   */
+  icon(n: number, request?: Request): Promise<Response> {
+    return this.passthrough(`/icon/${n}`, request);
+  }
+
   /** The sandboxed render the reference explorer uses on its cards. */
   preview(n: number, request?: Request): Promise<Response> {
     return this.passthrough(`/preview/${n}`, request);
