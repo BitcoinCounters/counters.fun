@@ -10,7 +10,10 @@ function git(args: string): string {
   catch { return ""; }
 }
 const BUILD_COMMIT = git("rev-parse --short HEAD") || "unknown";
-const BUILD_DATE = git("log -1 --format=%cs") || new Date().toISOString().slice(0, 10);
+// Date and clock, in UTC: a deploy twice in one day is two different builds,
+// and the footer should tell them apart.
+const stamp = (unix: number) => `${new Date(unix * 1000).toISOString().slice(0, 16).replace("T", " ")} UTC`;
+const BUILD_DATE = stamp(Number(git("log -1 --format=%ct")) || Date.now() / 1000);
 const APP_VERSION = (() => {
   try { return JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8")).version as string; }
   catch { return "0.0.0"; }
