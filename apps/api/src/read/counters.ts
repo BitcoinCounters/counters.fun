@@ -191,7 +191,7 @@ export function countersRoutes(): ReadApp {
     const assetName = listing?.token_asset ?? live?.asset_info?.asset_longname ?? live!.asset;
     const counter = await counterByAsset(c.env.DB, assetName.toUpperCase());
     if (!counter) return c.json({ error: "not found" }, 404);
-    const [withDelegate] = await withDelegates(c.env.DB, [counter]);
+    const [withDelegate] = await withRendering(c.env.DB, [counter]);
     return J(c, { result: { id: hash, listing, live, counter: withDelegate } }, 30);
   });
 
