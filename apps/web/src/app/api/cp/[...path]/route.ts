@@ -58,6 +58,10 @@ const COMPOSE_ALLOWED = new Set([
   // Only used to send LP tokens to the unspendable address; a plain send is
   // still a compose, and the wallet still sees exactly what it signs.
   "send",
+  // A purchase from a dispenser: the BTC payment plus the message that makes
+  // consensus read it as one. A bare payment has bought nothing since block
+  // 866,000.
+  "dispense",
 ]);
 
 function allowed(path: string[], method: string): boolean {

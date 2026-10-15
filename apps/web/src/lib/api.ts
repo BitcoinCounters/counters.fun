@@ -155,6 +155,32 @@ export interface CounterDetail extends CounterRow {
   siblings: CounterRow[];
 }
 
+/** A dispenser as Core reports it live — see the worker's `DispenserLive`. */
+export interface DispenserLive {
+  tx_hash: string;
+  block_index: number;
+  source: string | null;
+  origin: string | null;
+  asset: string;
+  give_quantity: string | number;
+  escrow_quantity: string | number;
+  satoshirate: string | number;
+  give_remaining: string | number;
+  status: number;
+  dispense_count: number;
+  oracle_address: string | null;
+  close_block_index: number | null;
+  block_time: number | null;
+}
+
+/** One dispenser: this index's listing, Core's live figures, and the counter it vends. */
+export interface DispenserDetail {
+  id: string;
+  listing: Listing | null;
+  live: DispenserLive | null;
+  counter: CounterRow;
+}
+
 export interface Stats {
   counters_total: number;
   counters_on_chain: number;
@@ -257,6 +283,9 @@ export const getCounter = async (id: string): Promise<CounterDetail | Undisplaya
   );
   return counter.displayable ? { ...counter, listings: counter.listings ?? [] } : counter;
 };
+
+export const getDispenser = (hash: string) =>
+  read<DispenserDetail>(`/dispensers/${encodeURIComponent(hash)}`);
 
 export const getPool = (id: string) =>
   read<PoolDetail | null>(`/counters/${encodeURIComponent(id)}/pool`);
