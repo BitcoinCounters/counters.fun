@@ -26,6 +26,7 @@ import {
 import { Counterparty } from "#api/upstream/counterparty";
 import { CountersServer } from "#api/upstream/counters-server";
 import { BURN_ADDRESS } from "@counters/core/counter";
+import { parsePriced } from "@counters/core/listing";
 import { big } from "@counters/core/numeric";
 
 const SORTS = new Set<PooledSort>([
@@ -59,6 +60,10 @@ export function countersRoutes(): ReadApp {
     const before = c.req.query("before") ? Number(c.req.query("before")) : undefined;
     const offersLimit = clamp(Number(c.req.query("offers_limit") ?? limit), 1, 200);
     const offersOffset = clamp(Number(c.req.query("offers_offset") ?? 0), 0, 100_000);
+    // `priced=xcp,btc` | `all`: which denominations the DEX list and its
+    // count include. Every one when unsaid — the page chooses its own
+    // default, the API does not.
+    const priced = parsePriced(c.req.query("priced"));
 
     // Every list of counters leaves with its delegates attached, so a card
     // anywhere shows an edition as the file it renders.
@@ -69,7 +74,7 @@ export function countersRoutes(): ReadApp {
     if (filter === "pooled") return list(pooledCounters(db, sort, limit));
     if (filter === "unpooled") return list(unpooledCounters(db, limit, before));
     if (filter === "minting") return list(mintingCounters(db, limit));
-    if (filter === "dex") return list(venueOffers(db, "order", offersLimit, offersOffset));
+    if (filter === "dex") return list(venueOffers(db, "order", offersLimit, offersOffset, priced));
     if (filter === "dispensers") return list(venueOffers(db, "dispenser", offersLimit, offersOffset));
     if (filter === "heaviest") return list(heaviestCounters(db, limit));
 
@@ -81,9 +86,9 @@ export function countersRoutes(): ReadApp {
       pooledCounters(c.env.DB, sort, limit),
       mintingCounters(c.env.DB, 50),
       Promise.all([
-        venueOffers(c.env.DB, "order", offersLimit, offersOffset),
+        venueOffers(c.env.DB, "order", offersLimit, offersOffset, priced),
         venueOffers(c.env.DB, "dispenser", offersLimit, offersOffset),
-        venueCounts(c.env.DB),
+        venueCounts(c.env.DB, priced),
       ]).catch((cause) => {
         console.error("[read] offers unavailable:", (cause as Error).message);
         return null;

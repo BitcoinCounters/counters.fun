@@ -134,6 +134,24 @@ export const copy = {
     dex: {
       title: "DEX",
       empty: "No counter has an open order on the Counterparty DEX right now.",
+      emptyFiltered: "No open order is priced that way. Untick a filter to see the rest of the book.",
+      /**
+       * Folded behind one word, as on the protocol explorer. The switches
+       * are the denominations an order can be priced in; XCP alone is the
+       * default, so the book opens on the orders a reader can rank against
+       * a pool's quote. The values are the `?priced=` classes.
+       */
+      filters: {
+        label: "filters",
+        priced: {
+          label: "priced in",
+          options: [
+            { value: "xcp", label: "XCP", title: "orders priced in XCP — comparable with a pool's quote" },
+            { value: "btc", label: "BTC", title: "orders priced in bitcoin" },
+            { value: "other", label: "other", title: "orders priced in some other asset — a RARE.PEPE.N offered for a RARE.PEPE" },
+          ] as const,
+        },
+      },
       /** The order table's header, and what a row's side is called. */
       columns: {
         counter: "counter",

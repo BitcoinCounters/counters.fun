@@ -227,10 +227,15 @@ export const OFFERS_PAGE = 50;
  * `dispensers` were added, the page was handed a payload from before they
  * existed and threw on `.length`.
  */
-export const getHome = async (sort = "liquidity", offersOffset = 0): Promise<HomeData> => ({
+export const getHome = async (
+  sort = "liquidity",
+  offersOffset = 0,
+  priced?: readonly string[],
+): Promise<HomeData> => ({
   ...NO_COUNTERS,
   ...(await readOr<Partial<HomeData>>(
-    `/counters?sort=${encodeURIComponent(sort)}&offers_limit=${OFFERS_PAGE}&offers_offset=${offersOffset}`,
+    `/counters?sort=${encodeURIComponent(sort)}&offers_limit=${OFFERS_PAGE}&offers_offset=${offersOffset}` +
+      (priced ? `&priced=${encodeURIComponent(priced.join(","))}` : ""),
     NO_COUNTERS,
   )),
 });
