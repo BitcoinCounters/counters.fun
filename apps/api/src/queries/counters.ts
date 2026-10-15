@@ -323,8 +323,7 @@ function pricedSql(priced?: readonly PriceClass[]): string {
   if (!priced || PRICE_CLASSES.every((c) => priced.includes(c))) return "";
   const terms: string[] = [];
   if (priced.includes("xcp")) terms.push(`l.price_asset = 'XCP'`);
-  if (priced.includes("btc")) terms.push(`l.price_asset = 'BTC'`);
-  if (priced.includes("other")) terms.push(`l.price_asset NOT IN ('XCP', 'BTC')`);
+  if (priced.includes("other")) terms.push(`l.price_asset <> 'XCP'`);
   return terms.length > 0 ? ` AND (${terms.join(" OR ")})` : "";
 }
 
@@ -416,6 +415,17 @@ export function listingsFor(db: D1Database, asset: string): Promise<ListingRow[]
                CASE price_asset WHEN 'XCP' THEN 0 WHEN 'BTC' THEN 1 ELSE 2 END,
                price ASC`,
     asset,
+  );
+}
+
+/** One open dispenser's listing by the dispenser's own hash, or null. */
+export function dispenserListing(db: D1Database, hash: string): Promise<ListingRow | null> {
+  return one<ListingRow>(
+    db,
+    `SELECT id, kind, token_asset, side, price, price_asset, remaining, source, block_index
+       FROM listings
+      WHERE id = ?1 AND kind = 'dispenser'`,
+    hash,
   );
 }
 

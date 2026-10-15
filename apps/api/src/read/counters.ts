@@ -10,6 +10,7 @@ import {
   counterByAsset,
   counterByNumber,
   counterSiblings,
+  dispenserListing,
   counterVisibility,
   heaviestCounters,
   listingsFor,
@@ -167,6 +168,31 @@ export function countersRoutes(): ReadApp {
       { result: { ...withDelegate, block_time: blockTime, displayable: true, pool, listings, siblings } },
       30,
     );
+  });
+
+  /**
+   * One dispenser, by its hash: the listing this index holds, the live
+   * figures from Core (lot, rate, what is left, how often it has vended),
+   * and the counter it vends. Either source may be away; the page needs one.
+   * A dispenser on something this site does not list is a 404, as its
+   * counter would be.
+   */
+  app.get("/dispensers/:hash", async (c) => {
+    const hash = c.req.param("hash").toLowerCase();
+    if (!/^[0-9a-f]{64}$/.test(hash)) return c.json({ error: "not found" }, 404);
+    const cp = new Counterparty(c.env.COUNTERPARTY_API_BASE);
+    const [listing, live] = await Promise.all([
+      dispenserListing(c.env.DB, hash).catch(() => null),
+      cp.dispenser(hash),
+    ]);
+    if (!listing && !live) return c.json({ error: "not found" }, 404);
+    // The listing names the counter as this index does; Core names the
+    // ledger asset, with the dotted name alongside for a subasset.
+    const assetName = listing?.token_asset ?? live?.asset_info?.asset_longname ?? live!.asset;
+    const counter = await counterByAsset(c.env.DB, assetName.toUpperCase());
+    if (!counter) return c.json({ error: "not found" }, 404);
+    const [withDelegate] = await withDelegates(c.env.DB, [counter]);
+    return J(c, { result: { id: hash, listing, live, counter: withDelegate } }, 30);
   });
 
   /** Reserve snapshots for the chart. */
