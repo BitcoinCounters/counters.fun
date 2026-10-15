@@ -67,6 +67,15 @@ export interface Counter {
     size: number | null;
     fragment: string | null;
   } | null;
+  /**
+   * The inscription id (`<txid>i<n>`) an asset-info JSON body names as its
+   * icon — the `images` entry of type `icon` — or null. The server's
+   * `/icon/<n>` serves those bytes out of the reveal witness through its own
+   * node, never from the gateway the body's URL names. Every RARE.PEPE
+   * edition has one, 48×48. Absent on payloads from before the server
+   * carried it.
+   */
+  icon?: string | null;
 }
 
 /* -------------------------------------------------------------------- */
