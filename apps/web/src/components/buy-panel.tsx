@@ -104,6 +104,12 @@ export function BuyPanel({
         dispenser,
         quantity: terms.pay.toString(),
         sat_per_vbyte: String(fee.rate ?? 0),
+        // A second buy may follow a first that has not confirmed: let the
+        // compose spend the pending change. Core lists it at zero
+        // confirmations, and the wallet signs an unconfirmed input whose
+        // parent cannot have attached assets — a dispense cannot. The CLI's
+        // buy sends the same.
+        allow_unconfirmed_inputs: "true",
         // Coins carrying assets stay out of the payment; a UTXO that holds a
         // counter is not what anyone means to spend on one.
         exclude_utxos_with_balances: "true",
