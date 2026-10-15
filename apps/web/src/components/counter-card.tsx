@@ -10,6 +10,7 @@ import { mintProgress } from "@counters/core/fairminter";
 import { big } from "@counters/core/numeric";
 import { copy } from "@content/copy";
 import { dispenserUrl } from "@/lib/constants";
+import { DispenserBuy } from "@/components/dispenser-buy";
 
 /**
  * The card. One shape across every home-page listing, because they are the
@@ -202,7 +203,7 @@ export function MintingCard({ counter, tip }: { counter: MintingCounter; tip: nu
  * A dispenser. The tile leads to the dispenser's own page rather than the
  * counter's — the card is about this offer, and a reader who clicked a
  * price and a remaining count should land on that, not on a pool panel.
- * The buy under it goes to the same page, at the buy.
+ * The buy under it buys here, in a dialog, without leaving the grid.
  */
 export function DispenserCard({ offer }: { offer: Offer }) {
   // The column fills its grid cell and the tile takes the slack, so a card
@@ -233,12 +234,7 @@ export function DispenserCard({ offer }: { offer: Offer }) {
         </span>
       )}
     </Shell>
-    <Link
-      href={`${dispenserUrl(offer.offer_id)}#buy`}
-      className="rounded-xl border border-copper bg-copper-ghost px-4 py-2 text-center font-mono text-[11px] uppercase tracking-[0.1em] text-copper2 transition-colors hover:bg-copper hover:text-bg"
-    >
-      {copy.home.dispensers.buy}
-    </Link>
+    <DispenserBuy offer={offer} />
     </div>
   );
 }
