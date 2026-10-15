@@ -506,6 +506,10 @@ export const copy = {
         "Paying this address from another wallet buys nothing: since block 866,000 a purchase is a Counterparty dispense message, which this composes and your wallet signs.",
       cta: "buy",
       preparing: "composing…",
+      /** The dialog a card's buy opens. */
+      loading: "asking the node for the lot and the rate…",
+      close: "close",
+      page: "the dispenser's page",
       minerFee: "miner fee",
       total: "total",
       confirm: (receive: string, asset: string, total: string) =>
