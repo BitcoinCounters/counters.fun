@@ -59,7 +59,7 @@ export async function serveContent(
   ctx: Waiter,
   request: Request,
   number: number,
-  variant: "content" | "preview" | "stamp" | "icon",
+  variant: "content" | "preview" | "stamp",
 ): Promise<Response> {
   // Only this site may frame a counter. The upstream's blanket
   // X-Frame-Options: DENY is what made this proxy necessary in the first
@@ -86,24 +86,6 @@ export async function serveContent(
       headers: { "content-type": "text/plain; charset=utf-8" },
     });
   }
-  // An icon's bytes are not the counter's either: they are the inscription
-  // the counter names, keyed by that inscription's id since the same icon
-  // can be named by any number of counters. No row in `icons`, no icon.
-  let iconId: string | null = null;
-  if (variant === "icon") {
-    const icon = await one<{ inscription_id: string }>(
-      env.DB,
-      `SELECT inscription_id FROM icons WHERE number = ?1`,
-      number,
-    ).catch(() => null);
-    if (!icon) {
-      return new Response("no icon", {
-        status: 404,
-        headers: { "content-type": "text/plain; charset=utf-8" },
-      });
-    }
-    iconId = icon.inscription_id;
-  }
   if (variant === "stamp" && !row.stamp_mime) {
     // Not an error in the counter — it simply is not a stamp, so there is no
     // decoded image to serve. Matches the upstream route's own answer.
@@ -119,16 +101,12 @@ export async function serveContent(
   // decodes to — 2,808 bytes of image/gif behind 3,750 bytes of text/plain for
   // #188 LORDFUN. Declaring the row's length here would leave a browser
   // waiting on 942 bytes that never arrive.
-  const declaredType = variant === "stamp" ? row.stamp_mime!
-    : variant === "icon" ? "image/png"
-    : row.content_type;
+  const declaredType = variant === "stamp" ? row.stamp_mime! : row.content_type;
 
   // Content-addressed: the same bytes are the same object no matter which
   // number asked for them, so a reinscription of identical content is stored
   // once. Previews are derived, so they key on the variant too.
-  const key = iconId ? `icon/${iconId}`
-    : row.sha256 ? `${variant}/${row.sha256}`
-    : `${variant}/n/${number}`;
+  const key = row.sha256 ? `${variant}/${row.sha256}` : `${variant}/n/${number}`;
   const range = request.headers.get("range");
 
   // Range requests bypass R2's object cache and stream from the upstream:
@@ -148,18 +126,8 @@ export async function serveContent(
     ? await server.preview(number, request)
     : variant === "stamp"
       ? await server.stamp(number, request)
-      : variant === "icon"
-        ? await server.icon(number, request)
-        : await server.content(number, request);
+      : await server.content(number, request);
 
-  if (variant === "icon" && (upstream.status === 404 || upstream.status === 415)) {
-    // The server's own verdict on what the counter names: nothing there, or
-    // not a small image. Pass it on rather than calling the upstream down.
-    return new Response(await upstream.text(), {
-      status: upstream.status,
-      headers: { "content-type": "text/plain; charset=utf-8" },
-    });
-  }
   if (!upstream.ok && upstream.status !== 206) {
     return new Response("upstream unavailable", { status: 502 });
   }

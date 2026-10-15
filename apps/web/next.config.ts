@@ -51,7 +51,6 @@ const config: NextConfig = {
       { source: "/content/:n", destination: `${API}/content/:n` },
       { source: "/preview/:n", destination: `${API}/preview/:n` },
       { source: "/stamp/:n", destination: `${API}/stamp/:n` },
-      { source: "/icon/:n", destination: `${API}/icon/:n` },
     ];
   },
 

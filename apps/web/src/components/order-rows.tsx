@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { renderMode } from "@counters/core/counter";
 import type { Offer } from "@/lib/api";
-import { contentUrl, iconUrl, stampUrl } from "@/lib/constants";
+import { contentUrl, stampUrl } from "@/lib/constants";
 import { fmtAsk, fmtCompact, mimeTag, shortMime } from "@/lib/format";
 import { Meter } from "@/components/meter";
 import { rendered } from "@/components/counter-content";
@@ -79,15 +79,7 @@ const GRID =
 /**
  * A row's picture.
  *
- * A counter that names an icon shows it, first and whatever its file is: it
- * is the picture made for this size, and five kilobytes. Every RARE.PEPE
- * edition names one, and without it each row framed the 3.96 MB SVG the
- * edition delegates to — three hundred rows, one four-megabyte document
- * each. The icon is an ordinals inscription the counters server reads out
- * of the chain through its own node, so it is shown on the same terms as
- * everything else here.
- *
- * Otherwise an image is an `<img>`. An SVG is a frame, because here an SVG is a script
+ * An image is an `<img>`. An SVG is a frame, because here an SVG is a script
  * host and gets the same sandbox it has everywhere else on the site — and it
  * is the case that matters: every RARE.PEPE edition is a delegate of one SVG,
  * and without its picture the DEX is three hundred rows that say JSON. The
@@ -112,19 +104,6 @@ function Thumb({ offer }: { offer: Offer }) {
   });
   const box = "h-8 w-8 shrink-0 overflow-hidden rounded-md border border-line2 bg-bg2";
 
-  if (offer.icon) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element -- immutable
-      // bytes from this origin's proxy, as below.
-      <img
-        src={iconUrl(offer.number)}
-        alt=""
-        loading="lazy"
-        decoding="async"
-        className={`${box} object-cover [image-rendering:pixelated]`}
-      />
-    );
-  }
   if (mode === "image" || mode === "stamp") {
     return (
       // eslint-disable-next-line @next/next/no-img-element -- as in

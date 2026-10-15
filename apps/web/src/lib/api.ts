@@ -42,13 +42,6 @@ export interface CounterRow {
    * Absent on payloads from before the API carried it.
    */
   delegate?: Delegate | null;
-  /**
-   * The inscription id of the small picture this counter names as its icon
-   * (an `images` entry of type `icon` in an asset-info body), or null. The
-   * bytes are at `iconUrl(number)`. Absent on payloads from before the API
-   * carried it.
-   */
-  icon?: string | null;
 }
 
 export interface Delegate {

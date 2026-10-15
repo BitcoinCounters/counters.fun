@@ -21,7 +21,7 @@ import {
   unpooledCounters,
   venueCounts,
   venueOffers,
-  withRendering,
+  withDelegates,
   type PooledSort,
 } from "#api/queries/counters";
 import { Counterparty } from "#api/upstream/counterparty";
@@ -66,12 +66,11 @@ export function countersRoutes(): ReadApp {
     // default, the API does not.
     const priced = parsePriced(c.req.query("priced"));
 
-    // Every list of counters leaves with its delegates and icons attached, so
-    // a card anywhere shows an edition as the file it renders, and a row as
-    // the small picture it names.
+    // Every list of counters leaves with its delegates attached, so a card
+    // anywhere shows an edition as the file it renders.
     const db = c.env.DB;
     const list = async <T extends { number: number }>(rows: Promise<T[]>) =>
-      J(c, { result: await withRendering(db, await rows) });
+      J(c, { result: await withDelegates(db, await rows) });
 
     if (filter === "pooled") return list(pooledCounters(db, sort, limit));
     if (filter === "unpooled") return list(unpooledCounters(db, limit, before));
@@ -99,10 +98,10 @@ export function countersRoutes(): ReadApp {
     const [dex, dispensers, counts] = offers ?? [[], [], { pool: pooled.length, dex: 0, dispenser: 0 }];
     return J(c, {
       result: {
-        pooled: await withRendering(db, pooled),
-        dex: await withRendering(db, dex),
-        dispensers: await withRendering(db, dispensers),
-        minting: await withRendering(db, minting),
+        pooled: await withDelegates(db, pooled),
+        dex: await withDelegates(db, dex),
+        dispensers: await withDelegates(db, dispensers),
+        minting: await withDelegates(db, minting),
         counts,
       },
     });
@@ -161,7 +160,7 @@ export function countersRoutes(): ReadApp {
       backfillBlockTime(c.env, counter.number, counter.block_time),
     ]);
 
-    const [withDelegate] = await withRendering(c.env.DB, [counter]);
+    const [withDelegate] = await withDelegates(c.env.DB, [counter]);
 
     return J(
       c,
@@ -191,7 +190,7 @@ export function countersRoutes(): ReadApp {
     const assetName = listing?.token_asset ?? live?.asset_info?.asset_longname ?? live!.asset;
     const counter = await counterByAsset(c.env.DB, assetName.toUpperCase());
     if (!counter) return c.json({ error: "not found" }, 404);
-    const [withDelegate] = await withRendering(c.env.DB, [counter]);
+    const [withDelegate] = await withDelegates(c.env.DB, [counter]);
     return J(c, { result: { id: hash, listing, live, counter: withDelegate } }, 30);
   });
 

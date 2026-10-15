@@ -167,11 +167,6 @@ async function syncCounters(
   } catch (cause) {
     console.error("[sync] delegates not recorded:", (cause as Error).message);
   }
-  try {
-    await syncIcons(db, server, fetched, cold);
-  } catch (cause) {
-    console.error("[sync] icons not recorded:", (cause as Error).message);
-  }
 
   // A count mismatch means the index is still short. Recorded rather than
   // thrown: a partial index is serviceable, and the next tick continues.
@@ -236,44 +231,6 @@ async function syncDelegates(
   }
   for (let i = 0; i < writes.length; i += 50) await db.batch(writes.slice(i, i + 50));
   if (!seeded) await setState(db, "delegates_seeded", String(Date.now()));
-}
-
-/**
- * Record which counters name an icon — see 0005_icons. The same first-run
- * walk as the delegates, for the same reason: the editions that have icons
- * were indexed long before this table existed.
- */
-async function syncIcons(
-  db: D1Database,
-  server: CountersServer,
-  fetched: Counter[],
-  walkedEverything: boolean,
-): Promise<void> {
-  let counters = fetched;
-  const seeded = await one<{ value: string }>(
-    db,
-    `SELECT value FROM chain_state WHERE key = 'icons_seeded'`,
-  );
-  if (!seeded && !walkedEverything) {
-    counters = [];
-    for await (const batch of server.walk(100, 200)) counters.push(...batch);
-  }
-
-  const writes: D1PreparedStatement[] = [];
-  for (const c of counters) {
-    if (c.icon) {
-      writes.push(
-        db
-          .prepare(
-            `INSERT INTO icons (number, inscription_id) VALUES (?1,?2)
-             ON CONFLICT(number) DO UPDATE SET inscription_id = excluded.inscription_id`,
-          )
-          .bind(c.number, c.icon),
-      );
-    }
-  }
-  for (let i = 0; i < writes.length; i += 50) await db.batch(writes.slice(i, i + 50));
-  if (!seeded) await setState(db, "icons_seeded", String(Date.now()));
 }
 
 /**

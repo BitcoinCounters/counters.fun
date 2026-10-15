@@ -116,44 +116,6 @@ export async function withDelegates<T extends { number: number }>(
   return rows.map((row) => ({ ...row, delegate: found.get(row.number) ?? null }));
 }
 
-/**
- * The same rows, each with its `icon` — the inscription id of the small
- * picture it names, see 0005_icons — or null. Allowed to fail like the
- * delegates, and for the same reason.
- */
-export async function withIcons<T extends { number: number }>(
-  db: D1Database,
-  rows: T[],
-): Promise<(T & { icon: string | null })[]> {
-  const found = new Map<number, string>();
-  try {
-    const numbers = [...new Set(rows.map((r) => r.number))];
-    const lookups: Promise<{ number: number; inscription_id: string }[]>[] = [];
-    for (let i = 0; i < numbers.length; i += 90) {
-      const slice = numbers.slice(i, i + 90);
-      lookups.push(
-        q(
-          db,
-          `SELECT number, inscription_id FROM icons WHERE number IN (${slice.map((_, n) => `?${n + 1}`).join(",")})`,
-          ...slice,
-        ),
-      );
-    }
-    for (const r of (await Promise.all(lookups)).flat()) found.set(r.number, r.inscription_id);
-  } catch (cause) {
-    console.error("[read] icons unavailable:", (cause as Error).message);
-  }
-  return rows.map((row) => ({ ...row, icon: found.get(row.number) ?? null }));
-}
-
-/** Everything a card or a row needs to draw a counter: its delegate and its icon. */
-export async function withRendering<T extends { number: number }>(
-  db: D1Database,
-  rows: T[],
-): Promise<(T & { delegate: Delegate | null; icon: string | null })[]> {
-  return withIcons(db, await withDelegates(db, rows));
-}
-
 export interface PooledCounterRow extends CounterRow {
   asset_a: string;
   asset_b: string;

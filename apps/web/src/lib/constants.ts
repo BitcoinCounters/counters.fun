@@ -45,12 +45,6 @@ export const previewUrl = (number: number) => `/preview/${number}`;
  * protocol's own indexer. No server supplies the picture; one only unwraps it.
  */
 export const stampUrl = (number: number) => `/stamp/${number}`;
-/**
- * The icon a counter names: an ordinals inscription's bytes, read by the
- * counters server out of the reveal witness through its own node. Same
- * premise again — a picture shown because it is in a Bitcoin block.
- */
-export const iconUrl = (number: number) => `/icon/${number}`;
 
 /** `amm_pools` (Core v11.1.0) — pools cannot exist before this block. */
 export const AMM_POOLS_ACTIVATION_BLOCK = 952_500;
