@@ -204,10 +204,10 @@ const POOLED_ORDER: Record<PooledSort, string> = {
   number: `c.number ASC`,
   newest: `p.block_index DESC`,
   // Price per kilobyte, cheapest first: marketcap over the asset's bytes —
-  // pricePerKb in packages/counters/src/pool.ts. No price or no bytes
-  // sorts last, which with ASC means a huge stand-in rather than NULL
+  // pricePerKb in packages/counters/src/pool.ts. No price, no bytes or
+  // nothing circulating sorts last, which with ASC means a huge stand-in rather than NULL
   // (SQLite puts NULL first in an ascending order).
-  perkb: `CASE WHEN p.price IS NULL OR p.price <= 0 OR ${ASSET_BYTES} <= 0 THEN 1e300
+  perkb: `CASE WHEN p.price IS NULL OR p.price <= 0 OR ${ASSET_BYTES} <= 0 OR ${CIRCULATING} <= 0 THEN 1e300
                ELSE (p.price * ${CIRCULATING}) / (${ASSET_BYTES} / 1024.0) END ASC, c.number ASC`,
 };
 
@@ -310,7 +310,7 @@ const OFFER_ORDER: Record<OfferSort, string> = {
   // By the kilobyte, as the pool sort: the comparable denominations first,
   // then the offer's price × circulating supply over the asset's bytes.
   perkb: `CASE l.price_asset WHEN 'XCP' THEN 0 WHEN 'BTC' THEN 1 ELSE 2 END,
-          CASE WHEN l.price <= 0 OR ${ASSET_BYTES} <= 0 THEN 1e300
+          CASE WHEN l.price <= 0 OR ${ASSET_BYTES} <= 0 OR ${CIRCULATING} <= 0 THEN 1e300
                ELSE (l.price * ${CIRCULATING}) / (${ASSET_BYTES} / 1024.0) END ASC, c.number ASC, l.id ASC`,
 };
 
