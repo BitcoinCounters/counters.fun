@@ -66,6 +66,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           {/* One quiet line so a visitor (or the operator) can tell which build
               is serving and when it last changed. Values are baked at build. */}
           <footer className="mx-auto w-full max-w-[1120px] px-5 pb-6 text-center text-[11px] text-neutral-400">
+            <nav aria-label="Related sites" className="mb-2 flex flex-wrap justify-center gap-x-4 gap-y-1">
+              {copy.site.footer.map((l) => (
+                <a key={l.href} href={l.href} className="hover:text-ink">
+                  {l.label}
+                </a>
+              ))}
+            </nav>
             v{process.env.NEXT_PUBLIC_APP_VERSION} · {process.env.NEXT_PUBLIC_BUILD_COMMIT} · updated {process.env.NEXT_PUBLIC_BUILD_DATE}
           </footer>
         </AppProviders>

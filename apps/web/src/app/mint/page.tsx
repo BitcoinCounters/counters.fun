@@ -1,11 +1,9 @@
 import { MintForm } from "./mint-form";
 import { copy } from "@content/copy";
 import { fill } from "@content/fill";
+import { pageMetadata } from "@/lib/page-metadata";
 
-export const metadata = {
-  title: "counters.fun",
-  description: "Put a file in Bitcoin's witness data and issue the asset that owns it.",
-};
+export const metadata = pageMetadata("/mint", copy.site.pages.mint, "Put a file in Bitcoin's witness data and issue the asset that owns it.");
 
 export default function MintPage() {
   return (
