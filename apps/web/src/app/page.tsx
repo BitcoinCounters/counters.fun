@@ -8,8 +8,12 @@ import { VenueToggle } from "@/components/venue-toggle";
 import { DexFilters } from "@/components/dex-filters";
 import { DEFAULT_PRICED, parsePriced, pricedParam, type PriceClass } from "@counters/core/listing";
 import { copy } from "@content/copy";
+import { pageMetadata } from "@/lib/page-metadata";
 
 export const revalidate = 30;
+
+// Every `?venue=`, `?page=`, `?sort=` variant names `/` as its canonical.
+export const metadata = pageMetadata("/", copy.site.pages.home, copy.site.description);
 
 /**
  * The home page.
@@ -102,6 +106,9 @@ export default async function HomePage({
 
   return (
     <>
+      {/* The page's one h1. The visible headline lives behind "about" in the
+          header; this states it for crawlers and screen readers. */}
+      <h1 className="sr-only">{copy.site.h1}</h1>
       {/* One line: what is on Bitcoin, and the block. The prices and the
           search live in the header, the same on every page; the introduction
           lives behind "about" there too. */}
