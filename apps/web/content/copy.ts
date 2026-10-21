@@ -47,7 +47,7 @@ export const copy = {
       { href: "https://counters.gallery/", label: "counters.gallery" },
       { href: "https://blockspace.wiki/projects/counters.fun/", label: "counters.fun on blockspace.wiki" },
       { href: "https://block.space/", label: "block.space" },
-      { href: "https://blockspace.holdings/", label: "Blockspace Holdings" },
+      { href: "https://blockspace.holdings/", label: "Part of Blockspace Holdings" },
     ],
 
     /** What a shared link to one counter says. A counter that trades leads
