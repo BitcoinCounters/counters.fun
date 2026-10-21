@@ -44,10 +44,10 @@ export const copy = {
 
     /** The footer's links, above the build line. Plain links, server-rendered. */
     footer: [
-      { href: "https://counters.gallery", label: "counters.gallery" },
+      { href: "https://counters.gallery/", label: "counters.gallery" },
       { href: "https://blockspace.wiki/projects/counters.fun/", label: "counters.fun on blockspace.wiki" },
-      { href: "https://block.space", label: "block.space" },
-      { href: "https://blockspace.holdings", label: "Blockspace Holdings" },
+      { href: "https://block.space/", label: "block.space" },
+      { href: "https://blockspace.holdings/", label: "Blockspace Holdings" },
     ],
 
     /** What a shared link to one counter says. A counter that trades leads

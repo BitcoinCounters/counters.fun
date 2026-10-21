@@ -2,7 +2,11 @@ import { docsHtml } from "@content/docs";
 import { pageMetadata } from "@/lib/page-metadata";
 import { copy } from "@content/copy";
 
-export const metadata = pageMetadata("/docs", copy.site.pages.docs, "What a counter is, how it gets a pool, and why nothing here is hosted.");
+export const metadata = {
+  ...pageMetadata("/docs", copy.site.pages.docs, "What a counter is, how it gets a pool, and why nothing here is hosted."),
+  // The same text as Markdown, for agents and anything that would rather not parse HTML.
+  alternates: { canonical: "/docs", types: { "text/markdown": "/docs.md" } },
+};
 
 /**
  * The docs page is `content/docs.md`.
