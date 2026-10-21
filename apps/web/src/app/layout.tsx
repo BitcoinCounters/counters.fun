@@ -45,7 +45,7 @@ export const metadata: Metadata = {
 const SITE_JSONLD = {
   "@context": "https://schema.org",
   "@graph": [
-    { "@type": "Organization", "@id": "https://blockspace.holdings/#org", name: "Blockspace Holdings", url: "https://blockspace.holdings/" },
+    { "@type": "Organization", "@id": "https://blockspace.holdings/#org", name: "Blockspace Co.", url: "https://blockspace.holdings/" },
     {
       "@type": "WebSite",
       "@id": `${SITE_URL}/#website`,
