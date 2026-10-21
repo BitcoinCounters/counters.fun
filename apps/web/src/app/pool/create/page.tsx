@@ -1,11 +1,9 @@
 import { PoolForm } from "./pool-form";
 import { copy } from "@content/copy";
 import { fill } from "@content/fill";
+import { pageMetadata } from "@/lib/page-metadata";
 
-export const metadata = {
-  title: "counters.fun",
-  description: "Open a counter's constant-product pool against XCP, or add to one.",
-};
+export const metadata = pageMetadata("/pool/create", copy.site.pages.pool, "Open a counter's constant-product pool against XCP, or add to one.");
 
 export default async function NewPoolPage({
   searchParams,

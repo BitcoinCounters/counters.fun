@@ -42,6 +42,22 @@ export const metadata: Metadata = {
   },
 };
 
+const SITE_JSONLD = {
+  "@context": "https://schema.org",
+  "@graph": [
+    { "@type": "Organization", "@id": "https://blockspace.holdings/#org", name: "Blockspace Co.", url: "https://blockspace.holdings/" },
+    {
+      "@type": "WebSite",
+      "@id": `${SITE_URL}/#website`,
+      url: `${SITE_URL}/`,
+      name: copy.site.title,
+      description: copy.site.ogDescription,
+      publisher: { "@id": "https://blockspace.holdings/#org" },
+      inLanguage: "en",
+    },
+  ],
+};
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
@@ -56,6 +72,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body>
+        {/* What this site is, for search engines and agents: the WebSite, and
+            the organisation that publishes it by reference. */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(SITE_JSONLD).replace(/</g, "\\u003c") }}
+        />
         <AppProviders>
           {/* Local runs only: collects this tab's unhandled failures into
               .logs/errors.log, where the server writes its own. */}
@@ -66,6 +88,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           {/* One quiet line so a visitor (or the operator) can tell which build
               is serving and when it last changed. Values are baked at build. */}
           <footer className="mx-auto w-full max-w-[1120px] px-5 pb-6 text-center text-[11px] text-neutral-400">
+            <nav aria-label="Related sites" className="mb-2 flex flex-wrap justify-center gap-x-4 gap-y-1">
+              {copy.site.footer.map((l) => (
+                <a key={l.href} href={l.href} className="hover:text-ink">
+                  {l.label}
+                </a>
+              ))}
+            </nav>
             v{process.env.NEXT_PUBLIC_APP_VERSION} · {process.env.NEXT_PUBLIC_BUILD_COMMIT} · updated {process.env.NEXT_PUBLIC_BUILD_DATE}
           </footer>
         </AppProviders>

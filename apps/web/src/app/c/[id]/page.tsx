@@ -104,6 +104,9 @@ export async function generateMetadata({
   return {
     title,
     description,
+    // By number: /c/<asset> serves the same page, and the number is the
+    // counter's name.
+    alternates: { canonical: `/c/${counter.number}` },
     openGraph: {
       title,
       description,

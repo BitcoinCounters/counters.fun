@@ -3,13 +3,11 @@ import { getActivity, getStats } from "@/lib/api";
 import { fmtCompact, fmtDate, mimeTag, trunc } from "@/lib/format";
 import { mempoolTxUrl } from "@/lib/constants";
 import { copy } from "@content/copy";
+import { pageMetadata } from "@/lib/page-metadata";
 
 export const revalidate = 30;
 
-export const metadata = {
-  title: "counters.fun",
-  description: "Swaps against counter pools, newest first.",
-};
+export const metadata = pageMetadata("/activity", copy.site.pages.activity, "Swaps against counter pools, newest first.");
 
 /**
  * The tape. Every swap that has been executed against a counter's pool.

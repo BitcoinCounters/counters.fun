@@ -31,6 +31,25 @@ export const copy = {
     ogDescription: "Counters with XCP liquidity pools. On-chain files only.",
     ogImageAlt: "counters.fun — the market layer for Bitcoin Counters",
 
+    /** Each page's <title>. The home page keeps the bare site name. */
+    pages: {
+      home: "counters.fun — Counterparty Inscriptions Marketplace",
+      docs: "How it works — counters.fun",
+      mint: "Mint a counter — counters.fun",
+      pool: "Create or add to a pool — counters.fun",
+      activity: "Activity: every swap — counters.fun",
+    },
+    /** The home page's one <h1>: the headline that lives in the about panel. */
+    h1: "counters.fun: Counterparty Inscriptions Marketplace",
+
+    /** The footer's links, above the build line. Plain links, server-rendered. */
+    footer: [
+      { href: "https://counters.gallery/", label: "counters.gallery" },
+      { href: "https://blockspace.wiki/projects/counters.fun/", label: "counters.fun on blockspace.wiki" },
+      { href: "https://block.space/", label: "block.space" },
+      { href: "https://blockspace.holdings/", label: "Part of Blockspace Co." },
+    ],
+
     /** What a shared link to one counter says. A counter that trades leads
      *  with what it trades at; one that does not leads with what it is. */
     dispenser: {
