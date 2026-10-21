@@ -42,6 +42,22 @@ export const metadata: Metadata = {
   },
 };
 
+const SITE_JSONLD = {
+  "@context": "https://schema.org",
+  "@graph": [
+    { "@type": "Organization", "@id": "https://blockspace.holdings/#org", name: "Blockspace Holdings", url: "https://blockspace.holdings/" },
+    {
+      "@type": "WebSite",
+      "@id": `${SITE_URL}/#website`,
+      url: `${SITE_URL}/`,
+      name: copy.site.title,
+      description: copy.site.ogDescription,
+      publisher: { "@id": "https://blockspace.holdings/#org" },
+      inLanguage: "en",
+    },
+  ],
+};
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
@@ -56,6 +72,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body>
+        {/* What this site is, for search engines and agents: the WebSite, and
+            the organisation that publishes it by reference. */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(SITE_JSONLD).replace(/</g, "\\u003c") }}
+        />
         <AppProviders>
           {/* Local runs only: collects this tab's unhandled failures into
               .logs/errors.log, where the server writes its own. */}

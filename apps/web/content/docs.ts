@@ -21,7 +21,11 @@ import { fill } from "./fill";
  * bundler failure that `node:fs` produces on its own.
  */
 export async function docsHtml(): Promise<string> {
+  return marked.parse(await docsMarkdown(), { async: false });
+}
+
+/** The docs as Markdown, `{{TOKEN}}`s filled: what `/docs.md` serves. */
+export async function docsMarkdown(): Promise<string> {
   const path = join(process.cwd(), "content", "docs.md");
-  const source = await readFile(path, "utf8");
-  return marked.parse(fill(source), { async: false });
+  return fill(await readFile(path, "utf8"));
 }
