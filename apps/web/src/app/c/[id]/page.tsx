@@ -29,12 +29,14 @@ import {
   contentUrl,
   countersExplorerUrl,
   dispenserUrl,
+  mempoolAddressUrl,
   mempoolBlockUrl,
   mempoolTxUrl,
   stampUrl,
   xcpAssetUrl,
 } from "@/lib/constants";
 import { big } from "@counters/core/numeric";
+import { teleburnAddress } from "@/lib/teleburn";
 import { circulatingSupply } from "@counters/core/counter";
 import { pricePerKb } from "@counters/core/pool";
 
@@ -203,6 +205,7 @@ export default async function CounterPage({ params }: { params: Promise<{ id: st
               ["divisible", counter.divisible === 1 ? "yes" : "no"],
               ["locked", counter.locked === 1 ? "yes" : "no"],
               ["owner", trunc(counter.owner, 10, 8)],
+              ...teleburnRows(counter),
             ]}
           />
         </div>
@@ -449,7 +452,38 @@ function OffersPanel({
  * it is the file's position in Bitcoin, which is the whole claim the protocol
  * makes.
  */
-function Provenance({ counter }: { counter: Extract<Awaited<ReturnType<typeof getCounter>>, { displayable: true }> }) {
+type Displayable = Extract<Awaited<ReturnType<typeof getCounter>>, { displayable: true }>;
+
+/**
+ * The counters protocol's teleburn address for this counter's asset (build
+ * reference v3 §10.3): derived from the asset name right here, so it is on
+ * every page, with the reference indexer's copy as a check. Null only for a
+ * name that is not a canonical Counterparty asset, which no counter has.
+ */
+function teleburnAddressOf(counter: Displayable): string | null {
+  return teleburnAddress(counter.asset) ?? counter.teleburn_address ?? null;
+}
+
+const yn = (v: number | null | undefined) => (v == null ? "unknown" : v === 1 ? "yes" : "no");
+
+/**
+ * The burn verdict, when the index has one. `teleburned` is ownership and
+ * every unit at the address plus the supply lock; anything short of that
+ * is shown as the parts, never collapsed to a "no".
+ */
+function teleburnRows(counter: Displayable): [string, string][] {
+  if (counter.teleburned == null && counter.teleburn_owner == null) return [];
+  if (counter.teleburned === 1) return [["teleburned", "yes"]];
+  return [
+    [
+      "teleburned",
+      `no · owner ${yn(counter.teleburn_owner)} · supply ${yn(counter.teleburn_supply)} · locked ${yn(counter.locked)}`,
+    ],
+  ];
+}
+
+function Provenance({ counter }: { counter: Displayable }) {
+  const teleburn = teleburnAddressOf(counter);
   return (
     <section className="mt-10">
       <SectionHead title="Provenance" meta="verifiable against the chain" />
@@ -481,6 +515,11 @@ function Provenance({ counter }: { counter: Extract<Awaited<ReturnType<typeof ge
           value={`counters.gallery/c/${counter.number}`}
           href={countersExplorerUrl(counter.number)}
         />
+        {/* The asset's one unspendable address: anything sent here is burned
+            into it. Derived from the asset name, so it needs no index. */}
+        {teleburn && (
+          <Fact label="teleburn address" value={teleburn} href={mempoolAddressUrl(teleburn)} mono />
+        )}
       </div>
     </section>
   );

@@ -35,6 +35,16 @@ export interface CounterRow {
   block_time: number | null;
   /** "xcp.fun" when the deploy came through that launchpad. */
   launchpad: string | null;
+  /** Teleburn state (counters build reference §10.3) as the reference
+   *  indexer last reported it: the asset's unspendable address, whether its
+   *  owner is that address, whether no unit circulates outside it, and the
+   *  verdict (`teleburned`: both, and the supply locked). null until learned;
+   *  absent on payloads from before the API carried it. The page derives the
+   *  address itself from the asset name and uses this one as a check. */
+  teleburn_address?: string | null;
+  teleburn_owner?: number | null;
+  teleburn_supply?: number | null;
+  teleburned?: number | null;
   /** The asset's on-chain bytes over every counter it carries, for price
    *  per KB. Absent on payloads from before the API carried it. */
   asset_bytes?: number | null;

@@ -325,15 +325,20 @@ async function upsertCounters(db: D1Database, fresh: Counter[]): Promise<void> {
            number, asset, asset_id, asset_longname, kind, content_type, content_type_raw,
            size, is_pointer_like, stamp_mime, envelope, owner, source, txid, msg_index,
            block, tx_index, sha256, rolling_hash, supply, divisible, locked, burned,
-           fee, tx_size, xcp_burned, body, block_time, seen_at
+           fee, tx_size, xcp_burned, body, block_time, seen_at,
+           teleburn_address, teleburn_owner, teleburn_supply, teleburned
          ) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,
-                   ?21,?22,?23,?24,?25,?26,?27,?28,?29)
+                   ?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33)
          ON CONFLICT(number) DO UPDATE SET
            body = COALESCE(excluded.body, counters.body),
            owner = excluded.owner,
            supply = excluded.supply,
            burned = excluded.burned,
-           locked = excluded.locked`,
+           locked = excluded.locked,
+           teleburn_address = COALESCE(excluded.teleburn_address, counters.teleburn_address),
+           teleburn_owner = excluded.teleburn_owner,
+           teleburn_supply = excluded.teleburn_supply,
+           teleburned = excluded.teleburned`,
       )
       .bind(
         c.number,
@@ -365,6 +370,10 @@ async function upsertCounters(db: D1Database, fresh: Counter[]): Promise<void> {
         c.body ?? null,
         c.block_time ?? null,
         now,
+        c.teleburn?.address ?? null,
+        bool(c.teleburn?.owner_burned),
+        bool(c.teleburn?.supply_burned),
+        bool(c.teleburned ?? c.teleburn?.burned),
       ),
   );
 

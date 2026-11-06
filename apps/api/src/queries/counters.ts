@@ -61,6 +61,14 @@ export interface CounterRow {
   block_time: number | null;
   /** 'xcp.fun' when the deploy came through that launchpad; see @counters/core/launchpad. */
   launchpad: string | null;
+  /** Teleburn state as the reference indexer last reported it (0005_teleburn):
+   *  the asset's unspendable address, and whether its owner is that address,
+   *  no unit circulates outside it, and the two plus the lock (`teleburned`).
+   *  NULL until learned. */
+  teleburn_address: string | null;
+  teleburn_owner: number | null;
+  teleburn_supply: number | null;
+  teleburned: number | null;
   /** The asset's on-chain bytes over every counter it carries, for price per KB. */
   asset_bytes: number;
 }
@@ -155,6 +163,7 @@ const COUNTER_COLUMNS = `
   c.is_pointer_like, c.stamp_mime, c.owner, c.txid, c.block, c.tx_index, c.sha256,
   c.rolling_hash, c.supply, c.divisible, c.locked, c.burned, c.fee,
   c.tx_size, c.body, c.block_time, c.launchpad,
+  c.teleburn_address, c.teleburn_owner, c.teleburn_supply, c.teleburned,
   ${ASSET_BYTES} AS asset_bytes`;
 
 export type PooledSort =

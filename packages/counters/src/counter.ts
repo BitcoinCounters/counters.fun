@@ -44,6 +44,21 @@ export interface Counter {
   divisible: boolean;
   locked: boolean | null;
   burned: Raw | null;
+  /**
+   * Teleburn state (build reference v3 §10.3): the asset's unspendable
+   * address and whether ownership and every unit have gone there. Live
+   * state like `locked`; `burned` is the verdict, null while unknown.
+   * Absent on payloads from before the indexer carried it.
+   */
+  teleburn?: {
+    address: string | null;
+    owner_burned: boolean | null;
+    supply_burned: boolean | null;
+    locked: boolean | null;
+    sink_balance: Raw | null;
+    burned: boolean | null;
+  } | null;
+  teleburned?: boolean | null;
   /** Bitcoin miner fee paid by the reveal, in satoshis. */
   fee: number;
   tx_size: number;
